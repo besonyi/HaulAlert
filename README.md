@@ -40,4 +40,10 @@ To receive Telegram updates, set the same `TELEGRAM_WEBHOOK_SECRET` in Telegram'
 pnpm --filter @haulalert/bot start
 ```
 
+The Mini App calls the authenticated alert API using its signed Telegram `initData`; start it with:
+
+```bash
+pnpm --filter @haulalert/api-service start
+```
+
 The repository starts with provider-neutral TypeScript packages and services. Applications are introduced only when their API and operational boundary are defined.

@@ -25,8 +25,17 @@ export interface UpdateAlertInput extends CreateAlertInput {
   readonly alertId: string;
 }
 
+export interface AlertManagementRepository {
+  create(input: CreateAlertInput): Promise<ManagedAlert>;
+  listForUser(userId: string): Promise<readonly ManagedAlert[]>;
+  update(input: UpdateAlertInput): Promise<ManagedAlert | undefined>;
+  setStatus(alertId: string, userId: string, status: ManagedAlertStatus): Promise<ManagedAlert | undefined>;
+  duplicate(alertId: string, userId: string, name: string): Promise<ManagedAlert | undefined>;
+  remove(alertId: string, userId: string): Promise<boolean>;
+}
+
 /** PostgreSQL repository for the customer-facing alert lifecycle. */
-export class PostgresAlertRepository {
+export class PostgresAlertRepository implements AlertManagementRepository {
   public constructor(private readonly database: SqlExecutor) {}
 
   public async create(input: CreateAlertInput): Promise<ManagedAlert> {
