@@ -20,12 +20,15 @@ export interface AlertMatchResult {
 export interface AlertSubscription {
   readonly alertId: string;
   readonly userId: string;
+  /** Telegram chat identifier established during Bot onboarding. */
+  readonly telegramChatId: string;
   readonly filter: CanonicalFilter;
 }
 
 export interface AlertMatch {
   readonly alertId: string;
   readonly userId: string;
+  readonly telegramChatId: string;
   readonly load: NormalizedLoad;
 }
 
@@ -116,7 +119,12 @@ export function findMatchingAlerts(
   return subscriptions.flatMap((subscription) => {
     const result = matchLoadToFilter(load, subscription.filter, now);
     return result.matches
-      ? [{ alertId: subscription.alertId, userId: subscription.userId, load }]
+      ? [{
+          alertId: subscription.alertId,
+          userId: subscription.userId,
+          telegramChatId: subscription.telegramChatId,
+          load
+        }]
       : [];
   });
 }

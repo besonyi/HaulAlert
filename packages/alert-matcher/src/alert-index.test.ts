@@ -22,7 +22,7 @@ const baseFilter = parseCanonicalFilter({
 });
 
 function subscription(alertId: string, filter = baseFilter): AlertSubscription {
-  return { alertId, userId: `user-${alertId}`, filter };
+  return { alertId, userId: `user-${alertId}`, telegramChatId: `chat-${alertId}`, filter };
 }
 
 describe("alert index", () => {

@@ -14,7 +14,8 @@ import { TelegramRateLimitError } from "./telegram-bot-api-transport.js";
 function createMatch(): AlertMatch {
   return {
     alertId: "alert-1",
-    userId: "telegram-1",
+    userId: "user-1",
+    telegramChatId: "telegram-1",
     load: {
       provider: "central-dispatch",
       providerLoadId: "829181",

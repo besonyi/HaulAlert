@@ -58,10 +58,11 @@ describe("alert matcher", () => {
 
   it("fans a new load out only to matching alerts", () => {
     const matches = findMatchingAlerts(load(), [
-      { alertId: "alert-a", userId: "user-a", filter },
+      { alertId: "alert-a", userId: "user-a", telegramChatId: "chat-a", filter },
       {
         alertId: "alert-b",
         userId: "user-b",
+        telegramChatId: "chat-b",
         filter: parseCanonicalFilter({ ...filter, minimumPayUsd: 3000 })
       }
     ], now);
@@ -71,15 +72,17 @@ describe("alert matcher", () => {
 
   it("narrows candidates by provider without changing exact matching", () => {
     const index = new AlertCandidateIndex();
-    index.upsert({ alertId: "central-match", userId: "user-a", filter });
+    index.upsert({ alertId: "central-match", userId: "user-a", telegramChatId: "chat-a", filter });
     index.upsert({
       alertId: "central-no-match",
       userId: "user-b",
+      telegramChatId: "chat-b",
       filter: parseCanonicalFilter({ ...filter, minimumPayUsd: 3000 })
     });
     index.upsert({
       alertId: "shipcars-only",
       userId: "user-c",
+      telegramChatId: "chat-c",
       filter: parseCanonicalFilter({ ...filter, providers: ["shipcars"] })
     });
 
@@ -92,10 +95,11 @@ describe("alert matcher", () => {
 
   it("reindexes an updated subscription and removes paused alerts", () => {
     const index = new AlertCandidateIndex();
-    index.upsert({ alertId: "alert-a", userId: "user-a", filter });
+    index.upsert({ alertId: "alert-a", userId: "user-a", telegramChatId: "chat-a", filter });
     index.upsert({
       alertId: "alert-a",
       userId: "user-a",
+      telegramChatId: "chat-a",
       filter: parseCanonicalFilter({ ...filter, providers: ["shipcars"] })
     });
 

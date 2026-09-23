@@ -7,7 +7,8 @@ import { renderNewLoadNotification } from "./index.js";
 
 const match: AlertMatch = {
   alertId: "alert-1",
-  userId: "telegram-1",
+  userId: "user-1",
+  telegramChatId: "telegram-1",
   load: {
     provider: "central-dispatch",
     providerLoadId: "829181",

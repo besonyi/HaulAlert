@@ -70,7 +70,7 @@ export class NotificationService {
 
     try {
       await this.transport.send({
-        recipientId: match.userId,
+        recipientId: match.telegramChatId,
         notification: renderNewLoadNotification(match, options)
       });
       this.deliveryStore.confirm(deliveryKey);

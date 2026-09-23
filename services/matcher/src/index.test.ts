@@ -45,8 +45,18 @@ const load: NormalizedLoad = {
 describe("load match processor", () => {
   it("delivers every exact match and isolates a failed customer delivery", async () => {
     const index = new AlertCandidateIndex();
-    index.upsert({ alertId: "alert-fails", userId: "telegram-fails", filter });
-    index.upsert({ alertId: "alert-sends", userId: "telegram-sends", filter });
+    index.upsert({
+      alertId: "alert-fails",
+      userId: "user-fails",
+      telegramChatId: "telegram-fails",
+      filter
+    });
+    index.upsert({
+      alertId: "alert-sends",
+      userId: "user-sends",
+      telegramChatId: "telegram-sends",
+      filter
+    });
     const sent: string[] = [];
     const transport: TelegramTransport = {
       send: async ({ recipientId }) => {

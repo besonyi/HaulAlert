@@ -12,7 +12,8 @@ import {
 function createMatch(): AlertMatch {
   return {
     alertId: "alert-1",
-    userId: "telegram-1",
+    userId: "user-1",
+    telegramChatId: "telegram-1",
     load: {
       provider: "central-dispatch",
       providerLoadId: "829181",
@@ -47,6 +48,7 @@ describe("notification service", () => {
 
     assert.equal(first.status, "sent");
     assert.equal(second.status, "duplicate");
+    assert.equal(first.deliveryKey, "central-dispatch:829181:alert-1:user-1");
     assert.deepEqual(sent, ["telegram-1"]);
   });
 
