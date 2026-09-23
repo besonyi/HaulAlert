@@ -108,3 +108,4 @@ export {
   type DurableWorkerOutcome,
   type DurableWorkerRetryPolicy
 } from "./postgres-notification-worker.js";
+export { getDatabaseUrl, PgPoolSqlExecutor } from "./pg-pool-sql-executor.js";

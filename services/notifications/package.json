@@ -20,6 +20,10 @@
   "dependencies": {
     "@haulalert/alert-matcher": "workspace:*",
     "@haulalert/load-model": "workspace:*",
-    "@haulalert/telegram-notification": "workspace:*"
+    "@haulalert/telegram-notification": "workspace:*",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
   }
 }
