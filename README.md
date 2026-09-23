@@ -1,5 +1,7 @@
 # HaulAlert
 
+[![Verify](https://github.com/besonyi/HaulAlert/actions/workflows/ci.yml/badge.svg)](https://github.com/besonyi/HaulAlert/actions/workflows/ci.yml)
+
 Telegram-first load alert service for vehicle transport. Customers create saved alerts in a Telegram Mini App and receive a message when a matching load appears.
 
 ## Repository layout
