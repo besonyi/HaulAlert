@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { parseCanonicalFilter } from "@haulalert/canonical-filter";
 
-import { findMatchingAlerts, matchLoadToFilter } from "./index.js";
+import { AlertCandidateIndex, findMatchingAlerts, matchLoadToFilter } from "./index.js";
 import { load } from "./test-fixtures.js";
 
 const filter = parseCanonicalFilter({
@@ -67,5 +67,40 @@ describe("alert matcher", () => {
     ], now);
 
     assert.deepEqual(matches.map((match) => match.alertId), ["alert-a"]);
+  });
+
+  it("narrows candidates by provider without changing exact matching", () => {
+    const index = new AlertCandidateIndex();
+    index.upsert({ alertId: "central-match", userId: "user-a", filter });
+    index.upsert({
+      alertId: "central-no-match",
+      userId: "user-b",
+      filter: parseCanonicalFilter({ ...filter, minimumPayUsd: 3000 })
+    });
+    index.upsert({
+      alertId: "shipcars-only",
+      userId: "user-c",
+      filter: parseCanonicalFilter({ ...filter, providers: ["shipcars"] })
+    });
+
+    assert.deepEqual(index.findCandidates(load()).map(({ alertId }) => alertId), [
+      "central-match",
+      "central-no-match"
+    ]);
+    assert.deepEqual(index.findMatches(load(), now).map(({ alertId }) => alertId), ["central-match"]);
+  });
+
+  it("reindexes an updated subscription and removes paused alerts", () => {
+    const index = new AlertCandidateIndex();
+    index.upsert({ alertId: "alert-a", userId: "user-a", filter });
+    index.upsert({
+      alertId: "alert-a",
+      userId: "user-a",
+      filter: parseCanonicalFilter({ ...filter, providers: ["shipcars"] })
+    });
+
+    assert.deepEqual(index.findCandidates(load()), []);
+    index.remove("alert-a");
+    assert.deepEqual(index.findCandidates(load({ provider: "shipcars" })), []);
   });
 });

@@ -29,6 +29,56 @@ export interface AlertMatch {
   readonly load: NormalizedLoad;
 }
 
+/**
+ * Narrows each new load to subscriptions that selected its provider before
+ * evaluating the remaining customer-visible predicates.
+ */
+export class AlertCandidateIndex {
+  private readonly subscriptionsByAlertId = new Map<string, AlertSubscription>();
+  private readonly alertIdsByProvider = new Map<NormalizedLoad["provider"], Set<string>>();
+
+  public upsert(subscription: AlertSubscription): void {
+    this.remove(subscription.alertId);
+    this.subscriptionsByAlertId.set(subscription.alertId, subscription);
+
+    for (const provider of subscription.filter.providers) {
+      const alertIds = this.alertIdsByProvider.get(provider) ?? new Set<string>();
+      alertIds.add(subscription.alertId);
+      this.alertIdsByProvider.set(provider, alertIds);
+    }
+  }
+
+  public remove(alertId: string): void {
+    const subscription = this.subscriptionsByAlertId.get(alertId);
+    if (subscription === undefined) return;
+
+    this.subscriptionsByAlertId.delete(alertId);
+    for (const provider of subscription.filter.providers) {
+      const alertIds = this.alertIdsByProvider.get(provider);
+      if (alertIds === undefined) continue;
+
+      alertIds.delete(alertId);
+      if (alertIds.size === 0) this.alertIdsByProvider.delete(provider);
+    }
+  }
+
+  public findCandidates(load: NormalizedLoad): readonly AlertSubscription[] {
+    const alertIds = this.alertIdsByProvider.get(load.provider);
+    if (alertIds === undefined) return [];
+
+    return [...alertIds]
+      .sort()
+      .flatMap((alertId) => {
+        const subscription = this.subscriptionsByAlertId.get(alertId);
+        return subscription === undefined ? [] : [subscription];
+      });
+  }
+
+  public findMatches(load: NormalizedLoad, now: Date = new Date()): readonly AlertMatch[] {
+    return findMatchingAlerts(load, this.findCandidates(load), now);
+  }
+}
+
 /** Applies every customer-visible condition to one normalized load. */
 export function matchLoadToFilter(
   load: NormalizedLoad,
