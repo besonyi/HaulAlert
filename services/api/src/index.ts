@@ -149,3 +149,9 @@ function parseDate(value: unknown, column: string): Date {
   if (Number.isNaN(date.getTime())) throw new Error(`Expected ${column} to be a valid timestamp`);
   return date;
 }
+
+export {
+  verifyTelegramMiniAppInitData,
+  type AuthenticatedTelegramUser,
+  type TelegramMiniAppAuthOptions
+} from "./telegram-miniapp-auth.js";
