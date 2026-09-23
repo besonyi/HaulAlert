@@ -13,6 +13,11 @@ import {
 
 export { AlertCandidateIndex, findMatchingAlerts, matchLoadToFilter } from "@haulalert/alert-matcher";
 export type { AlertMatch, AlertMatchResult, AlertSubscription, MatchFailure } from "@haulalert/alert-matcher";
+export {
+  PostgresAlertSubscriptionSource,
+  RefreshingAlertCandidateIndex,
+  type ActiveAlertSubscriptionSource
+} from "./postgres-alert-subscription-source.js";
 
 export interface LoadProcessingOptions {
   readonly now?: Date;

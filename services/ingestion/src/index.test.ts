@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { AlertCandidateIndex } from "@haulalert/alert-matcher";
+import { AlertCandidateIndex, type AlertMatch } from "@haulalert/alert-matcher";
 import { parseCanonicalFilter } from "@haulalert/canonical-filter";
 import type { NormalizedLoad } from "@haulalert/load-model";
 import type { DurableNotificationDeliveryEnqueuer, SqlExecutor } from "@haulalert/notification-service";
@@ -82,5 +82,28 @@ describe("durable load ingestion", () => {
     const service = new DurableLoadIngestionService(persistence, new AlertCandidateIndex(), deliveries);
 
     assert.equal((await service.ingest(load)).status, "known");
+  });
+
+  it("supports an asynchronous durable alert source", async () => {
+    const persistence: LoadPersistence = { record: async () => ({ isNew: true }) };
+    const asyncAlerts = {
+      findMatches: async (): Promise<readonly AlertMatch[]> => [{
+        alertId: "alert-async",
+        userId: "user-async",
+        telegramChatId: "chat-async",
+        load
+      }]
+    };
+    const queuedAlertIds: string[] = [];
+    const deliveries: DurableNotificationDeliveryEnqueuer = {
+      enqueue: async (match) => {
+        queuedAlertIds.push(match.alertId);
+        return { status: "queued", deliveryId: "delivery-async", deliveryKey: "key-async" };
+      }
+    };
+
+    await new DurableLoadIngestionService(persistence, asyncAlerts, deliveries).ingest(load);
+
+    assert.deepEqual(queuedAlertIds, ["alert-async"]);
   });
 });

@@ -1,4 +1,4 @@
-import { AlertCandidateIndex, type AlertMatch } from "@haulalert/alert-matcher";
+import { type AlertMatch } from "@haulalert/alert-matcher";
 import type { NormalizedLoad } from "@haulalert/load-model";
 import type {
   DurableDeliveryEnqueueResult,
@@ -8,6 +8,10 @@ import type {
 
 export interface LoadPersistence {
   record(load: NormalizedLoad, seenAt?: Date): Promise<{ readonly isNew: boolean }>;
+}
+
+export interface AlertMatchFinder {
+  findMatches(load: NormalizedLoad, now?: Date): readonly AlertMatch[] | Promise<readonly AlertMatch[]>;
 }
 
 /** Stores normalized loads once globally, while updating their latest observation. */
@@ -55,7 +59,7 @@ export type IngestionResult =
 export class DurableLoadIngestionService {
   public constructor(
     private readonly loads: LoadPersistence,
-    private readonly alerts: AlertCandidateIndex,
+    private readonly alerts: AlertMatchFinder,
     private readonly deliveries: DurableNotificationDeliveryEnqueuer
   ) {}
 
@@ -63,7 +67,7 @@ export class DurableLoadIngestionService {
     const persisted = await this.loads.record(load, now);
     if (!persisted.isNew) return { status: "known", load };
 
-    const matches = this.alerts.findMatches(load, now);
+    const matches = await this.alerts.findMatches(load, now);
     const deliveries = await Promise.all(matches.map(async (match): Promise<IngestionDeliveryAttempt> => {
       try {
         return { status: "queued", match, result: await this.deliveries.enqueue(match, now) };
