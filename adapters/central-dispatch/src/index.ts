@@ -6,6 +6,14 @@ import type { ProviderFilterCapabilities } from "@haulalert/filter-compiler";
  */
 export const centralDispatchCapabilities: ProviderFilterCapabilities = {
   provider: "central-dispatch",
-  sourceFilterFields: ["origins", "destinations", "trailerTypes", "readiness"],
+  sourceFilterFields: [
+    "origins",
+    "destinations",
+    "trailerTypes",
+    "readiness",
+    "minimumPayUsd",
+    "minimumRatePerMile"
+  ],
+  vehicleCountSupport: "range",
   newLoadDetectionStrategy: "tagged-top"
 };

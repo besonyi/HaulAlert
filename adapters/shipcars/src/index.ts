@@ -1,11 +1,19 @@
 import type { ProviderFilterCapabilities } from "@haulalert/filter-compiler";
 
 /**
- * Ship.Cars begins conservatively: no native field is marked supported until
- * the browser adapter verifies it. The matcher therefore preserves all rules.
+ * HaulFlow's session-backed request builder applies these fields natively.
+ * The browser adapter still validates its live selector/endpoint behavior.
  */
 export const shipCarsCapabilities: ProviderFilterCapabilities = {
   provider: "shipcars",
-  sourceFilterFields: [],
-  newLoadDetectionStrategy: "unverified"
+  sourceFilterFields: [
+    "origins",
+    "destinations",
+    "trailerTypes",
+    "readiness",
+    "minimumPayUsd",
+    "minimumRatePerMile"
+  ],
+  vehicleCountSupport: "range",
+  newLoadDetectionStrategy: "newest-first"
 };

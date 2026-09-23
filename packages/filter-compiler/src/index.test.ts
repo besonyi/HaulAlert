@@ -11,8 +11,16 @@ import {
 
 const centralCapabilities: ProviderFilterCapabilities = {
   provider: "central-dispatch",
-  sourceFilterFields: ["origins", "destinations", "trailerTypes", "readiness"],
+  sourceFilterFields: ["origins", "destinations", "trailerTypes", "readiness", "minimumPayUsd", "minimumRatePerMile"],
+  vehicleCountSupport: "range",
   newLoadDetectionStrategy: "tagged-top"
+};
+
+const superCapabilities: ProviderFilterCapabilities = {
+  provider: "super-dispatch",
+  sourceFilterFields: ["origins", "destinations"],
+  vehicleCountSupport: "minimum-only",
+  newLoadDetectionStrategy: "newest-first"
 };
 
 function createFilter(overrides: Record<string, unknown> = {}) {
@@ -50,21 +58,32 @@ describe("filter compiler", () => {
 
     assert.deepEqual(Object.keys(compiled.sourceFilter).sort(), [
       "destinations",
+      "minimumPayUsd",
+      "minimumRatePerMile",
       "origins",
       "readiness",
-      "trailerTypes"
+      "trailerTypes",
+      "vehicles"
     ]);
-    assert.deepEqual(compiled.internalFilter.vehicles, { minimum: 1, maximum: 5 });
-    assert.equal(compiled.internalFilter.minimumPayUsd, 1500);
-    assert.equal(compiled.internalFilter.minimumRatePerMile, 1.8);
+    assert.equal(compiled.internalFilter.vehicles, undefined);
+    assert.equal(compiled.internalFilter.minimumPayUsd, undefined);
+    assert.equal(compiled.internalFilter.minimumRatePerMile, undefined);
     assert.deepEqual(compiled.internalFilter.blockedBrokerIds, ["broker-1"]);
   });
 
   it("reuses a source hash when customer-only constraints differ", () => {
-    const first = compileFilterForProvider(createFilter(), centralCapabilities);
+    const first = compileFilterForProvider(
+      createFilter({ providers: ["super-dispatch"] }),
+      superCapabilities
+    );
     const second = compileFilterForProvider(
-      createFilter({ name: "Driver Alex", minimumPayUsd: 1800, minimumRatePerMile: 2.2 }),
-      centralCapabilities
+      createFilter({
+        providers: ["super-dispatch"],
+        name: "Driver Alex",
+        minimumPayUsd: 1800,
+        minimumRatePerMile: 2.2
+      }),
+      superCapabilities
     );
 
     assert.equal(first.sourceFilterHash, second.sourceFilterHash);
@@ -75,5 +94,17 @@ describe("filter compiler", () => {
       () => compileFilterForProvider(createFilter(), { ...centralCapabilities, provider: "super-dispatch" }),
       ProviderNotEnabledError
     );
+  });
+
+  it("keeps an unsupported vehicle maximum for exact internal matching", () => {
+    const compiled = compileFilterForProvider(
+      createFilter({ providers: ["super-dispatch"] }),
+      superCapabilities
+    );
+
+    assert.deepEqual(compiled.sourceFilter.vehicles, { minimum: 1, maximum: null });
+    assert.deepEqual(compiled.internalFilter.vehicles, { minimum: null, maximum: 5 });
+    assert.equal(compiled.internalFilter.minimumPayUsd, 1500);
+    assert.equal(compiled.internalFilter.minimumRatePerMile, 1.8);
   });
 });

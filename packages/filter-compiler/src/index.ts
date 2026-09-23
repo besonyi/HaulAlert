@@ -7,22 +7,25 @@ export const sourceFilterFields = [
   "origins",
   "destinations",
   "trailerTypes",
-  "vehicles",
   "readiness",
   "minimumPayUsd",
   "minimumRatePerMile"
 ] as const;
 
 export type SourceFilterField = (typeof sourceFilterFields)[number];
+export type VehicleCountSupport = "unsupported" | "minimum-only" | "range";
 export type NewLoadDetectionStrategy = "tagged-top" | "newest-first" | "unverified";
 
 export interface ProviderFilterCapabilities {
   readonly provider: SupportedProvider;
   readonly sourceFilterFields: readonly SourceFilterField[];
+  readonly vehicleCountSupport: VehicleCountSupport;
   readonly newLoadDetectionStrategy: NewLoadDetectionStrategy;
 }
 
-export type SourceFilter = Partial<Pick<CanonicalFilter, SourceFilterField>>;
+export type SourceFilter = Partial<Pick<CanonicalFilter, SourceFilterField>> & {
+  readonly vehicles?: CanonicalFilter["vehicles"];
+};
 
 export interface InternalFilter {
   readonly vehicles?: CanonicalFilter["vehicles"];
@@ -59,15 +62,18 @@ export function compileFilterForProvider(
   }
 
   const supportedFields = new Set(capabilities.sourceFilterFields);
-  const sourceFilter = Object.fromEntries(
+  const sourceFilter = {
+    ...Object.fromEntries(
     sourceFilterFields
       .filter((field) => supportedFields.has(field))
       .map((field) => [field, filter[field]])
-  ) as SourceFilter;
+    ),
+    ...nativeVehicleFilter(filter, capabilities.vehicleCountSupport)
+  } as SourceFilter;
 
   const internalFilter: InternalFilter = {
     blockedBrokerIds: [...filter.blockedBrokerIds],
-    ...(supportedFields.has("vehicles") ? {} : { vehicles: filter.vehicles }),
+    ...internalVehicleFilter(filter, capabilities.vehicleCountSupport),
     ...(supportedFields.has("minimumPayUsd") ? {} : { minimumPayUsd: filter.minimumPayUsd }),
     ...(supportedFields.has("minimumRatePerMile")
       ? {}
@@ -80,6 +86,30 @@ export function compileFilterForProvider(
     internalFilter,
     sourceFilterHash: createSourceFilterHash(capabilities.provider, sourceFilter)
   };
+}
+
+function nativeVehicleFilter(
+  filter: CanonicalFilter,
+  support: VehicleCountSupport
+): Pick<SourceFilter, "vehicles"> {
+  if (support === "unsupported") return {};
+  if (support === "minimum-only") {
+    return { vehicles: { minimum: filter.vehicles.minimum, maximum: null } };
+  }
+
+  return { vehicles: filter.vehicles };
+}
+
+function internalVehicleFilter(
+  filter: CanonicalFilter,
+  support: VehicleCountSupport
+): Pick<InternalFilter, "vehicles"> {
+  if (support === "range") return {};
+  if (support === "minimum-only") {
+    return { vehicles: { minimum: null, maximum: filter.vehicles.maximum } };
+  }
+
+  return { vehicles: filter.vehicles };
 }
 
 /**
