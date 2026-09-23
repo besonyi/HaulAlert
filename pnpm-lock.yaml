@@ -191,6 +191,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/filter-compiler
 
+  packages/alert-matcher:
+    dependencies:
+      '@haulalert/canonical-filter':
+        specifier: workspace:*
+        version: link:../canonical-filter
+      '@haulalert/load-model':
+        specifier: workspace:*
+        version: link:../load-model
+
   packages/browser-runtime-core:
     dependencies:
       '@haulalert/shared':
@@ -240,6 +249,12 @@ importers:
       '@haulalert/filter-compiler':
         specifier: workspace:*
         version: link:../../packages/filter-compiler
+
+  services/matcher:
+    dependencies:
+      '@haulalert/alert-matcher':
+        specifier: workspace:*
+        version: link:../../packages/alert-matcher
 
 packages:
 
