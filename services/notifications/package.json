@@ -15,7 +15,8 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "node --test dist/*.test.js"
+    "test": "node --test dist/*.test.js",
+    "start": "node dist/worker-main.js"
   },
   "dependencies": {
     "@haulalert/alert-matcher": "workspace:*",
