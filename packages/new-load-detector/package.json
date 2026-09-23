@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "node --test dist/index.test.js"
+    "test": "node --test dist/*.test.js"
   },
   "dependencies": {
     "@haulalert/load-model": "workspace:*"

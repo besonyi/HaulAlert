@@ -22,6 +22,13 @@ export interface ClaimedNotificationDelivery {
   readonly match: AlertMatch;
 }
 
+export interface DurableNotificationDeliveryRepository {
+  claimDue(limit: number, now?: Date): Promise<readonly ClaimedNotificationDelivery[]>;
+  markSent(deliveryId: string, telegramMessageId: string | null, now?: Date): Promise<boolean>;
+  scheduleRetry(deliveryId: string, errorMessage: string, availableAt: Date, now?: Date): Promise<boolean>;
+  markDeadLetter(deliveryId: string, errorMessage: string, now?: Date): Promise<boolean>;
+}
+
 type EnqueueResult =
   | { readonly status: "queued"; readonly deliveryId: string; readonly deliveryKey: string }
   | { readonly status: "duplicate"; readonly deliveryKey: string };
@@ -30,7 +37,7 @@ type EnqueueResult =
  * PostgreSQL persistence for queue jobs. Every state transition is one SQL
  * statement so a worker crash cannot create a half-recorded attempt.
  */
-export class PostgresNotificationDeliveryRepository {
+export class PostgresNotificationDeliveryRepository implements DurableNotificationDeliveryRepository {
   public constructor(private readonly database: SqlExecutor) {}
 
   public async enqueue(match: AlertMatch, availableAt: Date = new Date()): Promise<EnqueueResult> {

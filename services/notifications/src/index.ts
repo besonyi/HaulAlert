@@ -99,5 +99,12 @@ export {
 export {
   PostgresNotificationDeliveryRepository,
   type ClaimedNotificationDelivery,
+  type DurableNotificationDeliveryRepository,
   type SqlExecutor
 } from "./postgres-notification-delivery-repository.js";
+export {
+  PostgresNotificationWorker,
+  type DurableWorkerOptions,
+  type DurableWorkerOutcome,
+  type DurableWorkerRetryPolicy
+} from "./postgres-notification-worker.js";
