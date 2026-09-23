@@ -6,19 +6,32 @@ import {
 } from "@haulalert/telegram-notification";
 
 export interface NotificationDeliveryStore {
-  has(deliveryKey: string): boolean;
-  record(deliveryKey: string): void;
+  tryReserve(deliveryKey: string): DeliveryReservation;
+  confirm(deliveryKey: string): void;
+  release(deliveryKey: string): void;
 }
 
-export class InMemoryNotificationDeliveryStore implements NotificationDeliveryStore {
-  private readonly deliveryKeys = new Set<string>();
+export type DeliveryReservation = "reserved" | "duplicate" | "in-flight";
 
-  public has(deliveryKey: string): boolean {
-    return this.deliveryKeys.has(deliveryKey);
+export class InMemoryNotificationDeliveryStore implements NotificationDeliveryStore {
+  private readonly deliveredKeys = new Set<string>();
+  private readonly reservedKeys = new Set<string>();
+
+  public tryReserve(deliveryKey: string): DeliveryReservation {
+    if (this.deliveredKeys.has(deliveryKey)) return "duplicate";
+    if (this.reservedKeys.has(deliveryKey)) return "in-flight";
+
+    this.reservedKeys.add(deliveryKey);
+    return "reserved";
   }
 
-  public record(deliveryKey: string): void {
-    this.deliveryKeys.add(deliveryKey);
+  public confirm(deliveryKey: string): void {
+    this.reservedKeys.delete(deliveryKey);
+    this.deliveredKeys.add(deliveryKey);
+  }
+
+  public release(deliveryKey: string): void {
+    this.reservedKeys.delete(deliveryKey);
   }
 }
 
@@ -31,7 +44,8 @@ export interface TelegramTransport {
 
 export type DeliveryResult =
   | { readonly status: "sent"; readonly deliveryKey: string }
-  | { readonly status: "duplicate"; readonly deliveryKey: string };
+  | { readonly status: "duplicate"; readonly deliveryKey: string }
+  | { readonly status: "in-flight"; readonly deliveryKey: string };
 
 /** Delivers each matching new load at most once per user and alert. */
 export class NotificationService {
@@ -45,16 +59,22 @@ export class NotificationService {
     options: { readonly loadDetailsUrl?: string } = {}
   ): Promise<DeliveryResult> {
     const deliveryKey = getDeliveryKey(match);
-    if (this.deliveryStore.has(deliveryKey)) {
-      return { status: "duplicate", deliveryKey };
+    const reservation = this.deliveryStore.tryReserve(deliveryKey);
+    if (reservation !== "reserved") {
+      return { status: reservation, deliveryKey };
     }
 
-    await this.transport.send({
-      recipientId: match.userId,
-      notification: renderNewLoadNotification(match, options)
-    });
-    this.deliveryStore.record(deliveryKey);
-    return { status: "sent", deliveryKey };
+    try {
+      await this.transport.send({
+        recipientId: match.userId,
+        notification: renderNewLoadNotification(match, options)
+      });
+      this.deliveryStore.confirm(deliveryKey);
+      return { status: "sent", deliveryKey };
+    } catch (error) {
+      this.deliveryStore.release(deliveryKey);
+      throw error;
+    }
   }
 }
 

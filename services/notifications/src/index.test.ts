@@ -65,4 +65,30 @@ describe("notification service", () => {
     assert.equal((await service.deliverNewLoad(match)).status, "sent");
     assert.equal(attempts, 2);
   });
+
+  it("reserves a delivery while Telegram is still sending it", async () => {
+    let allowSend: (() => void) | undefined;
+    let markSendStarted: (() => void) | undefined;
+    const sendStarted = new Promise<void>((resolve) => {
+      markSendStarted = resolve;
+    });
+    const transport: TelegramTransport = {
+      send: async () => {
+        markSendStarted?.();
+        await new Promise<void>((resolve) => {
+          allowSend = resolve;
+        });
+      }
+    };
+    const service = new NotificationService(transport, new InMemoryNotificationDeliveryStore());
+    const match = createMatch();
+
+    const firstDelivery = service.deliverNewLoad(match);
+    await sendStarted;
+
+    assert.equal((await service.deliverNewLoad(match)).status, "in-flight");
+    allowSend?.();
+    assert.equal((await firstDelivery).status, "sent");
+    assert.equal((await service.deliverNewLoad(match)).status, "duplicate");
+  });
 });
