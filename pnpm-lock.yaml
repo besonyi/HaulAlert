@@ -302,6 +302,9 @@ importers:
       '@haulalert/load-model':
         specifier: workspace:*
         version: link:../../packages/load-model
+      '@haulalert/new-load-detector':
+        specifier: workspace:*
+        version: link:../../packages/new-load-detector
       '@haulalert/notification-service':
         specifier: workspace:*
         version: link:../notifications

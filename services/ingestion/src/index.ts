@@ -1,5 +1,10 @@
 import { type AlertMatch } from "@haulalert/alert-matcher";
 import type { NormalizedLoad } from "@haulalert/load-model";
+import {
+  NewLoadDetector,
+  type NewLoadScanResult,
+  type OrderedLoadScan
+} from "@haulalert/new-load-detector";
 import type {
   DurableDeliveryEnqueueResult,
   DurableNotificationDeliveryEnqueuer,
@@ -81,5 +86,40 @@ export class DurableLoadIngestionService {
     }));
 
     return { status: "new", load, matches, deliveries };
+  }
+}
+
+export interface ProviderLoadCollector<SearchTarget> {
+  collect(target: SearchTarget): Promise<OrderedLoadScan>;
+}
+
+export interface ScannedIngestionResult {
+  readonly scan: NewLoadScanResult;
+  readonly ingestions: readonly IngestionResult[];
+}
+
+/**
+ * Joins an ordered provider result window to the durable new-load path. The
+ * initial scan seeds its boundary; only later unseen head rows are persisted,
+ * matched, and queued for notification.
+ */
+export class ScanIngestionProcessor {
+  public constructor(
+    private readonly detector: NewLoadDetector,
+    private readonly ingestion: DurableLoadIngestionService
+  ) {}
+
+  public async process(scan: OrderedLoadScan, now: Date = new Date()): Promise<ScannedIngestionResult> {
+    const detection = this.detector.inspect(scan);
+    const ingestions = await Promise.all(detection.newLoads.map((load) => this.ingestion.ingest(load, now)));
+    return { scan: detection, ingestions };
+  }
+
+  public async collectAndProcess<SearchTarget>(
+    collector: ProviderLoadCollector<SearchTarget>,
+    target: SearchTarget,
+    now: Date = new Date()
+  ): Promise<ScannedIngestionResult> {
+    return this.process(await collector.collect(target), now);
   }
 }

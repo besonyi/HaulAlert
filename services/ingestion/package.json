@@ -19,6 +19,7 @@
     "@haulalert/alert-matcher": "workspace:*",
     "@haulalert/canonical-filter": "workspace:*",
     "@haulalert/load-model": "workspace:*",
+    "@haulalert/new-load-detector": "workspace:*",
     "@haulalert/notification-service": "workspace:*"
   }
 }

@@ -4,9 +4,15 @@ import { describe, it } from "node:test";
 import { AlertCandidateIndex, type AlertMatch } from "@haulalert/alert-matcher";
 import { parseCanonicalFilter } from "@haulalert/canonical-filter";
 import type { NormalizedLoad } from "@haulalert/load-model";
+import { InMemorySeenLoadStore, NewLoadDetector } from "@haulalert/new-load-detector";
 import type { DurableNotificationDeliveryEnqueuer, SqlExecutor } from "@haulalert/notification-service";
 
-import { DurableLoadIngestionService, PostgresLoadRepository, type LoadPersistence } from "./index.js";
+import {
+  DurableLoadIngestionService,
+  PostgresLoadRepository,
+  ScanIngestionProcessor,
+  type LoadPersistence
+} from "./index.js";
 
 const load: NormalizedLoad = {
   provider: "central-dispatch",
@@ -105,5 +111,29 @@ describe("durable load ingestion", () => {
     await new DurableLoadIngestionService(persistence, asyncAlerts, deliveries).ingest(load);
 
     assert.deepEqual(queuedAlertIds, ["alert-async"]);
+  });
+
+  it("seeds an initial scan and only ingests new rows from later scan windows", async () => {
+    const recordedLoadIds: string[] = [];
+    const persistence: LoadPersistence = {
+      record: async (observed) => {
+        recordedLoadIds.push(observed.providerLoadId);
+        return { isNew: true };
+      }
+    };
+    const deliveries: DurableNotificationDeliveryEnqueuer = {
+      enqueue: async () => ({ status: "queued", deliveryId: "delivery-1", deliveryKey: "key-1" })
+    };
+    const ingestion = new DurableLoadIngestionService(persistence, new AlertCandidateIndex(), deliveries);
+    const processor = new ScanIngestionProcessor(new NewLoadDetector(new InMemorySeenLoadStore()), ingestion);
+    const newerLoad: NormalizedLoad = { ...load, providerLoadId: "newer-829182" };
+
+    const seeded = await processor.process({ searchId: "central:hash", loads: [load], isTruncated: false });
+    const detected = await processor.process({ searchId: "central:hash", loads: [newerLoad, load], isTruncated: false });
+
+    assert.equal(seeded.scan.seeded, true);
+    assert.deepEqual(seeded.ingestions, []);
+    assert.deepEqual(detected.scan.newLoads.map(({ providerLoadId }) => providerLoadId), ["newer-829182"]);
+    assert.deepEqual(recordedLoadIds, ["newer-829182"]);
   });
 });
