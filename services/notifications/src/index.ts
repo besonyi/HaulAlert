@@ -96,3 +96,8 @@ export {
   type DeliveryQueueOutcome,
   type NotificationRetryPolicy
 } from "./notification-delivery-queue.js";
+export {
+  PostgresNotificationDeliveryRepository,
+  type ClaimedNotificationDelivery,
+  type SqlExecutor
+} from "./postgres-notification-delivery-repository.js";
