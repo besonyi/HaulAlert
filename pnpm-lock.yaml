@@ -241,6 +241,12 @@ importers:
 
   packages/shared: {}
 
+  packages/telegram-notification:
+    dependencies:
+      '@haulalert/alert-matcher':
+        specifier: workspace:*
+        version: link:../alert-matcher
+
   services/browser-runtime:
     dependencies:
       '@haulalert/browser-runtime-core':
@@ -255,6 +261,18 @@ importers:
       '@haulalert/alert-matcher':
         specifier: workspace:*
         version: link:../../packages/alert-matcher
+
+  services/notifications:
+    dependencies:
+      '@haulalert/alert-matcher':
+        specifier: workspace:*
+        version: link:../../packages/alert-matcher
+      '@haulalert/load-model':
+        specifier: workspace:*
+        version: link:../../packages/load-model
+      '@haulalert/telegram-notification':
+        specifier: workspace:*
+        version: link:../../packages/telegram-notification
 
 packages:
 
