@@ -29,18 +29,22 @@ export interface DurableNotificationDeliveryRepository {
   markDeadLetter(deliveryId: string, errorMessage: string, now?: Date): Promise<boolean>;
 }
 
-type EnqueueResult =
+export type DurableDeliveryEnqueueResult =
   | { readonly status: "queued"; readonly deliveryId: string; readonly deliveryKey: string }
   | { readonly status: "duplicate"; readonly deliveryKey: string };
+
+export interface DurableNotificationDeliveryEnqueuer {
+  enqueue(match: AlertMatch, availableAt?: Date): Promise<DurableDeliveryEnqueueResult>;
+}
 
 /**
  * PostgreSQL persistence for queue jobs. Every state transition is one SQL
  * statement so a worker crash cannot create a half-recorded attempt.
  */
-export class PostgresNotificationDeliveryRepository implements DurableNotificationDeliveryRepository {
+export class PostgresNotificationDeliveryRepository implements DurableNotificationDeliveryRepository, DurableNotificationDeliveryEnqueuer {
   public constructor(private readonly database: SqlExecutor) {}
 
-  public async enqueue(match: AlertMatch, availableAt: Date = new Date()): Promise<EnqueueResult> {
+  public async enqueue(match: AlertMatch, availableAt: Date = new Date()): Promise<DurableDeliveryEnqueueResult> {
     const loadId = await this.findLoadId(match.load);
     const deliveryKey = getDeliveryKey(match);
     const result = await this.database.query(

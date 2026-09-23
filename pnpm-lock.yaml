@@ -256,6 +256,21 @@ importers:
         specifier: workspace:*
         version: link:../../packages/filter-compiler
 
+  services/ingestion:
+    dependencies:
+      '@haulalert/alert-matcher':
+        specifier: workspace:*
+        version: link:../../packages/alert-matcher
+      '@haulalert/canonical-filter':
+        specifier: workspace:*
+        version: link:../../packages/canonical-filter
+      '@haulalert/load-model':
+        specifier: workspace:*
+        version: link:../../packages/load-model
+      '@haulalert/notification-service':
+        specifier: workspace:*
+        version: link:../notifications
+
   services/matcher:
     dependencies:
       '@haulalert/alert-matcher':
