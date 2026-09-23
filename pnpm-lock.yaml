@@ -224,6 +224,12 @@ importers:
         specifier: ^3.24.4
         version: 3.25.76
 
+  packages/new-load-detector:
+    dependencies:
+      '@haulalert/load-model':
+        specifier: workspace:*
+        version: link:../load-model
+
   packages/shared: {}
 
   services/browser-runtime:
