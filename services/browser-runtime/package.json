@@ -1,0 +1,24 @@
+{
+  "name": "@haulalert/browser-runtime-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "node --test dist/index.test.js"
+  },
+  "dependencies": {
+    "@haulalert/browser-runtime-core": "workspace:*",
+    "@haulalert/filter-compiler": "workspace:*"
+  }
+}

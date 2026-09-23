@@ -191,6 +191,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/filter-compiler
 
+  packages/browser-runtime-core:
+    dependencies:
+      '@haulalert/shared':
+        specifier: workspace:*
+        version: link:../shared
+
   packages/canonical-filter:
     dependencies:
       '@haulalert/shared':
@@ -219,6 +225,15 @@ importers:
         version: 3.25.76
 
   packages/shared: {}
+
+  services/browser-runtime:
+    dependencies:
+      '@haulalert/browser-runtime-core':
+        specifier: workspace:*
+        version: link:../../packages/browser-runtime-core
+      '@haulalert/filter-compiler':
+        specifier: workspace:*
+        version: link:../../packages/filter-compiler
 
 packages:
 
