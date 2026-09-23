@@ -26,6 +26,6 @@ pnpm install
 pnpm check
 ```
 
-To prepare Telegram delivery locally, copy `.env.example` to `.env` and set `TELEGRAM_BOT_TOKEN`. The token stays server-side; customers are addressed using the Telegram chat ID established during Bot onboarding.
+To prepare Telegram delivery locally, copy `.env.example` to `.env` and set `TELEGRAM_BOT_TOKEN`. The token stays server-side; customers are addressed using the Telegram chat ID established during Bot onboarding. The PostgreSQL migration and transactional delivery rules are in [infra/database](infra/database/README.md).
 
 The repository starts with provider-neutral TypeScript packages and services. Applications are introduced only when their API and operational boundary are defined.

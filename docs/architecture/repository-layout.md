@@ -15,4 +15,4 @@ HaulAlert is organized as a TypeScript workspace. The folder layout is intention
 | `packages/*` | Canonical, reusable domain types and utilities | Runtime credentials and provider UI selectors |
 | `infra/` | Deployment, monitoring, and environment configuration | Application business logic |
 
-The shared package is the only implemented workspace package at this stage. It establishes the strict compiler baseline that future domain packages and services inherit.
+The implemented workspace now includes provider-neutral domain models, filter compilation, browser-runtime orchestration, new-load detection, matching, and Telegram delivery. Each layer remains independently testable so persistent adapters can replace in-memory runtime state without duplicating business rules.
