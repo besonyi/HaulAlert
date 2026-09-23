@@ -100,3 +100,6 @@ function welcomeText(isNew: boolean): string {
     ? "Welcome to HaulAlert. You are connected — create an alert and we will message you when a matching load appears."
     : "Welcome back to HaulAlert. Your Telegram notifications are connected.";
 }
+
+export { TelegramWebhookHandler, getTelegramWebhookSecret } from "./webhook.js";
+export type { TelegramWebhookRequest, TelegramWebhookResponse, TelegramUpdateHandler } from "./webhook.js";
