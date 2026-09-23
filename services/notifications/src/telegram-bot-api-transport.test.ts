@@ -61,6 +61,22 @@ describe("Telegram Bot API transport", () => {
     );
   });
 
+  it("sends a Bot command response without a load notification wrapper", async () => {
+    let request: Request | undefined;
+    const transport = new TelegramBotApiTransport("test-token", async (input, init) => {
+      request = new Request(input, init);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200 });
+    });
+
+    await transport.sendText("12345", "Welcome to HaulAlert");
+
+    assert.deepEqual(await request?.json(), {
+      chat_id: "12345",
+      text: "Welcome to HaulAlert",
+      disable_web_page_preview: true
+    });
+  });
+
   it("requires an explicitly configured bot token", () => {
     assert.throws(() => getTelegramBotToken({}), /TELEGRAM_BOT_TOKEN/);
     assert.equal(getTelegramBotToken({ TELEGRAM_BOT_TOKEN: " 123:secret " }), "123:secret");

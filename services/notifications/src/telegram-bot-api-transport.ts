@@ -51,6 +51,19 @@ export class TelegramBotApiTransport implements TelegramTransport {
             }
           })
     };
+    await this.sendMessage(body);
+  }
+
+  /** Sends a Bot command response without creating a load notification payload. */
+  public async sendText(recipientId: string, text: string): Promise<void> {
+    await this.sendMessage({
+      chat_id: recipientId,
+      text,
+      disable_web_page_preview: true
+    });
+  }
+
+  private async sendMessage(body: Record<string, unknown>): Promise<void> {
     const response = await this.fetchImplementation(
       `https://api.telegram.org/bot${this.botToken}/sendMessage`,
       {
