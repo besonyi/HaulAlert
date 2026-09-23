@@ -86,7 +86,11 @@ export function getDeliveryKey(match: AlertMatch): string {
   return `${getGlobalLoadKey(match.load)}:${match.alertId}:${match.userId}`;
 }
 
-export { getTelegramBotToken, TelegramBotApiTransport } from "./telegram-bot-api-transport.js";
+export {
+  getTelegramBotToken,
+  TelegramBotApiTransport,
+  TelegramRateLimitError
+} from "./telegram-bot-api-transport.js";
 export {
   InMemoryNotificationDeliveryQueue,
   type DeliveryQueueOutcome,

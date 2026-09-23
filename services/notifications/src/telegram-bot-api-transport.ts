@@ -5,6 +5,17 @@ type FetchImplementation = (input: string | URL | Request, init?: RequestInit) =
 interface TelegramApiResponse {
   readonly ok: boolean;
   readonly description?: string;
+  readonly parameters?: {
+    readonly retry_after?: number;
+  };
+}
+
+/** A Telegram 429 response with the server-directed wait duration. */
+export class TelegramRateLimitError extends Error {
+  public constructor(readonly retryAfterMs: number, description?: string) {
+    super(`Telegram rate limit exceeded; retry after ${retryAfterMs}ms${description === undefined ? "" : `: ${description}`}`);
+    this.name = "TelegramRateLimitError";
+  }
 }
 
 /** Reads the Bot API credential without ever embedding it in source code. */
@@ -49,20 +60,33 @@ export class TelegramBotApiTransport implements TelegramTransport {
       }
     );
 
-    if (!response.ok) {
-      throw new Error(`Telegram sendMessage failed with HTTP ${response.status}`);
+    const payload = await readTelegramApiResponse(response);
+    if (response.status === 429 && payload?.parameters?.retry_after !== undefined) {
+      throw new TelegramRateLimitError(payload.parameters.retry_after * 1_000, payload.description);
     }
-
-    const payload = await response.json();
-    if (!isTelegramApiResponse(payload) || !payload.ok) {
-      const description = isTelegramApiResponse(payload) && payload.description !== undefined
-        ? `: ${payload.description}`
-        : "";
+    if (!response.ok) {
+      const description = payload?.description === undefined ? "" : `: ${payload.description}`;
+      throw new Error(`Telegram sendMessage failed with HTTP ${response.status}${description}`);
+    }
+    if (payload === undefined || !payload.ok) {
+      const description = payload?.description === undefined ? "" : `: ${payload.description}`;
       throw new Error(`Telegram sendMessage was rejected${description}`);
     }
   }
 }
 
+async function readTelegramApiResponse(response: Response): Promise<TelegramApiResponse | undefined> {
+  try {
+    const payload: unknown = await response.json();
+    return isTelegramApiResponse(payload) ? payload : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isTelegramApiResponse(value: unknown): value is TelegramApiResponse {
-  return typeof value === "object" && value !== null && "ok" in value && typeof value.ok === "boolean";
+  return typeof value === "object"
+    && value !== null
+    && "ok" in value
+    && typeof value.ok === "boolean";
 }

@@ -9,6 +9,7 @@ import {
   NotificationService,
   type TelegramTransport
 } from "./index.js";
+import { TelegramRateLimitError } from "./telegram-bot-api-transport.js";
 
 function createMatch(): AlertMatch {
   return {
@@ -70,5 +71,23 @@ describe("notification delivery queue", () => {
     assert.equal((await queue.processDue(new Date(startedAt.getTime() + 1)))[0]?.status, "dead-letter");
     assert.equal(queue.size, 0);
     assert.equal(queue.deadLetters[0]?.status, "dead-letter");
+  });
+
+  it("honors Telegram's server-directed rate-limit delay", async () => {
+    const transport: TelegramTransport = {
+      send: async () => { throw new TelegramRateLimitError(5_000); }
+    };
+    const queue = new InMemoryNotificationDeliveryQueue(
+      new NotificationService(transport, new InMemoryNotificationDeliveryStore()),
+      { maximumAttempts: 3, initialRetryDelayMs: 100 }
+    );
+    queue.enqueue(createMatch(), {}, startedAt);
+
+    const outcome = (await queue.processDue(startedAt))[0];
+    assert.equal(outcome?.status, "retry-scheduled");
+    assert.equal(
+      outcome?.status === "retry-scheduled" && outcome.nextAttemptAt.toISOString(),
+      "2026-09-22T12:00:05.000Z"
+    );
   });
 });

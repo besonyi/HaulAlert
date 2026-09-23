@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 
 import {
   getTelegramBotToken,
-  TelegramBotApiTransport
+  TelegramBotApiTransport,
+  TelegramRateLimitError
 } from "./telegram-bot-api-transport.js";
 
 describe("Telegram Bot API transport", () => {
@@ -42,6 +43,21 @@ describe("Telegram Bot API transport", () => {
     await assert.rejects(
       () => transport.send({ recipientId: "12345", notification: { text: "test", actions: [] } }),
       /bot was blocked/
+    );
+  });
+
+  it("turns Telegram's retry-after response into a typed rate-limit error", async () => {
+    const transport = new TelegramBotApiTransport("test-token", async () => (
+      new Response(JSON.stringify({
+        ok: false,
+        description: "Too Many Requests: retry after 7",
+        parameters: { retry_after: 7 }
+      }), { status: 429 })
+    ));
+
+    await assert.rejects(
+      () => transport.send({ recipientId: "12345", notification: { text: "test", actions: [] } }),
+      (error: unknown) => error instanceof TelegramRateLimitError && error.retryAfterMs === 7_000
     );
   });
 

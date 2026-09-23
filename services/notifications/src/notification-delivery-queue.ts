@@ -6,6 +6,7 @@ import {
   type NewLoadDeliveryOptions,
   NotificationService
 } from "./index.js";
+import { TelegramRateLimitError } from "./telegram-bot-api-transport.js";
 
 export interface NotificationRetryPolicy {
   /** Includes the first failed delivery attempt before a job becomes dead letter. */
@@ -117,7 +118,10 @@ export class InMemoryNotificationDeliveryQueue {
           continue;
         }
 
-        const nextAttemptAt = new Date(now.getTime() + retryDelayMs(attempts, this.retryPolicy));
+        const nextAttemptAt = new Date(now.getTime() + Math.max(
+          retryDelayMs(attempts, this.retryPolicy),
+          error instanceof TelegramRateLimitError ? error.retryAfterMs : 0
+        ));
         this.jobsByKey.set(job.deliveryKey, { ...job, attempts, nextAttemptAt });
         outcomes.push({ status: "retry-scheduled", deliveryKey: job.deliveryKey, attempt: attempts, nextAttemptAt, error });
       }
