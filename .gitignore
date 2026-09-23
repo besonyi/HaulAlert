@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+
+# Generated browser-session and local runtime state must never be committed.
+runtime-data/
+sessions/
