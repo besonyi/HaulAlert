@@ -1,0 +1,16 @@
+{
+  "name": "@haulalert/miniapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc --project tsconfig.json && node scripts/build.mjs",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "node --test dist/*.test.js",
+    "start": "node scripts/serve.mjs"
+  },
+  "dependencies": {
+    "@haulalert/canonical-filter": "workspace:*"
+  }
+}

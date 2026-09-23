@@ -46,4 +46,10 @@ The Mini App calls the authenticated alert API using its signed Telegram `initDa
 pnpm --filter @haulalert/api-service start
 ```
 
+For the mobile Mini App shell and its same-origin `/api` proxy, run:
+
+```bash
+pnpm --filter @haulalert/miniapp start
+```
+
 The repository starts with provider-neutral TypeScript packages and services. Applications are introduced only when their API and operational boundary are defined.

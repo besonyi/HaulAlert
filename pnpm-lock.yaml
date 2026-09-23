@@ -204,6 +204,12 @@ importers:
         specifier: ^8.23.1
         version: 8.23.1
 
+  apps/miniapp:
+    dependencies:
+      '@haulalert/canonical-filter':
+        specifier: workspace:*
+        version: link:../../packages/canonical-filter
+
   packages/alert-matcher:
     dependencies:
       '@haulalert/canonical-filter':

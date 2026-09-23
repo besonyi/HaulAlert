@@ -1,0 +1,27 @@
+:root { --tg-background: #eef5f7; --tg-text: #102a43; --ink-muted: #627d98; --surface: #ffffff; --accent: #007c91; --accent-dark: #005f6f; --line: #d9e2ec; --danger: #b42318; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--tg-text); background: var(--tg-background); }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: radial-gradient(circle at 92% 0%, #c6f1ed 0, transparent 32rem), var(--tg-background); }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+.shell { max-width: 680px; min-height: 100dvh; margin: auto; padding: 28px 18px 104px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.eyebrow { margin: 0 0 4px; font-size: 11px; font-weight: 800; letter-spacing: .14em; color: var(--accent); }
+h1 { margin: 0; font-size: clamp(28px, 8vw, 38px); letter-spacing: -.04em; }
+.avatar { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--tg-text); color: white; font-weight: 800; }
+.notice { margin: -8px 0 18px; padding: 12px 14px; border-radius: 12px; background: #fff7db; color: #6d4c00; font-size: 14px; }
+.content { display: grid; gap: 14px; }
+.summary { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid #b7e5de; border-radius: 16px; background: #e5faf6; color: #285b5a; font-size: 14px; }
+.summary-count { font-size: 28px; line-height: 1; font-weight: 800; color: var(--accent-dark); }
+.cards { display: grid; gap: 12px; }
+.alert-card, .empty, .form { border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: 0 10px 26px rgb(16 42 67 / .05); }
+.alert-card { padding: 17px; }
+.alert-card.paused { opacity: .72; }
+.card-heading { display: flex; justify-content: space-between; gap: 12px; }
+h2 { margin: 0; font-size: 18px; letter-spacing: -.02em; }.card-heading p, .details { margin: 5px 0 0; color: var(--ink-muted); font-size: 14px; }.details { padding-top: 12px; border-top: 1px solid #edf2f7; }
+.status { align-self: start; padding: 5px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }.status.active { color: #126a51; background: #ddf8eb; }.status.paused { color: #75580b; background: #fff3ca; }
+.card-actions { display: flex; gap: 8px; margin-top: 16px; }.card-actions button { padding: 7px 10px; border: 0; border-radius: 9px; background: #edf5f7; color: var(--accent-dark); font-size: 13px; font-weight: 700; }.card-actions .danger { margin-left: auto; color: var(--danger); background: #fff0ee; }
+.empty { display: grid; justify-items: center; padding: 46px 24px; text-align: center; }.empty-icon { font-size: 42px; color: var(--accent); }.empty p, .form-intro { margin: 8px 0 20px; color: var(--ink-muted); line-height: 1.5; }
+.primary { min-height: 46px; padding: 0 18px; border: 0; border-radius: 12px; background: var(--accent); color: white; font-weight: 800; box-shadow: 0 8px 16px rgb(0 124 145 / .2); }.primary:active { background: var(--accent-dark); transform: translateY(1px); }
+.form { padding: 18px; }.form label { display: grid; gap: 7px; color: #334e68; font-size: 13px; font-weight: 750; }.form input, .form select { width: 100%; min-height: 43px; border: 1px solid #bcccdc; border-radius: 10px; padding: 0 11px; color: var(--tg-text); background: #fff; }.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.form fieldset { display: grid; gap: 10px; margin: 2px 0 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }.form legend { padding: 0 5px; color: var(--ink-muted); font-size: 12px; font-weight: 800; }.form label.check { display: flex; align-items: center; gap: 9px; }.form .check input { width: 18px; min-height: 18px; }.submit { width: 100%; margin-top: 4px; }
+.bottom-nav { position: fixed; right: 0; bottom: 0; left: 0; display: flex; justify-content: center; gap: 8px; padding: 10px max(18px, calc((100vw - 680px) / 2)); border-top: 1px solid var(--line); background: rgb(255 255 255 / .94); backdrop-filter: blur(14px); }.nav-button { display: grid; place-items: center; gap: 2px; flex: 1; max-width: 300px; padding: 7px; border: 0; border-radius: 10px; color: var(--ink-muted); background: transparent; font-size: 20px; }.nav-button span { font-size: 11px; font-weight: 700; }.nav-button.selected { color: var(--accent-dark); background: #e5faf6; }
+@media (max-width: 390px) { .shell { padding-inline: 13px; }.form-grid { grid-template-columns: 1fr; }.card-actions { gap: 5px; }.card-actions button { padding-inline: 8px; } }
