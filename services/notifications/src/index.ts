@@ -61,3 +61,5 @@ export class NotificationService {
 export function getDeliveryKey(match: AlertMatch): string {
   return `${getGlobalLoadKey(match.load)}:${match.alertId}:${match.userId}`;
 }
+
+export { getTelegramBotToken, TelegramBotApiTransport } from "./telegram-bot-api-transport.js";

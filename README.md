@@ -24,4 +24,6 @@ pnpm install
 pnpm check
 ```
 
-The repository starts with a small shared TypeScript package. Applications and services are introduced only when their API and operational boundary are defined.
+To prepare Telegram delivery locally, copy `.env.example` to `.env` and set `TELEGRAM_BOT_TOKEN`. The token stays server-side; customers are addressed using the Telegram chat ID established during Bot onboarding.
+
+The repository starts with provider-neutral TypeScript packages and services. Applications are introduced only when their API and operational boundary are defined.
