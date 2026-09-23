@@ -196,6 +196,13 @@ importers:
       '@haulalert/notification-service':
         specifier: workspace:*
         version: link:../../services/notifications
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
 
   packages/alert-matcher:
     dependencies:

@@ -9,13 +9,20 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "node --test dist/*.test.js"
+    "test": "node --test dist/*.test.js",
+    "start": "node dist/server-main.js"
   },
   "dependencies": {
-    "@haulalert/notification-service": "workspace:*"
+    "@haulalert/notification-service": "workspace:*",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
   }
 }

@@ -34,4 +34,10 @@ Once PostgreSQL has been migrated and `.env` contains both `DATABASE_URL` and `T
 pnpm --filter @haulalert/notification-service start
 ```
 
+To receive Telegram updates, set the same `TELEGRAM_WEBHOOK_SECRET` in Telegram's `setWebhook` request, expose `TELEGRAM_WEBHOOK_PATH` publicly, then run the Bot server:
+
+```bash
+pnpm --filter @haulalert/bot start
+```
+
 The repository starts with provider-neutral TypeScript packages and services. Applications are introduced only when their API and operational boundary are defined.
