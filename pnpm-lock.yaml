@@ -260,6 +260,15 @@ importers:
         specifier: workspace:*
         version: link:../alert-matcher
 
+  services/api:
+    dependencies:
+      '@haulalert/canonical-filter':
+        specifier: workspace:*
+        version: link:../../packages/canonical-filter
+      '@haulalert/notification-service':
+        specifier: workspace:*
+        version: link:../notifications
+
   services/browser-runtime:
     dependencies:
       '@haulalert/browser-runtime-core':
