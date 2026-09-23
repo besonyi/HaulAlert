@@ -173,6 +173,24 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  adapters/central-dispatch:
+    dependencies:
+      '@haulalert/filter-compiler':
+        specifier: workspace:*
+        version: link:../../packages/filter-compiler
+
+  adapters/shipcars:
+    dependencies:
+      '@haulalert/filter-compiler':
+        specifier: workspace:*
+        version: link:../../packages/filter-compiler
+
+  adapters/super-dispatch:
+    dependencies:
+      '@haulalert/filter-compiler':
+        specifier: workspace:*
+        version: link:../../packages/filter-compiler
+
   packages/canonical-filter:
     dependencies:
       '@haulalert/shared':
@@ -181,6 +199,15 @@ importers:
       zod:
         specifier: ^3.24.4
         version: 3.25.76
+
+  packages/filter-compiler:
+    dependencies:
+      '@haulalert/canonical-filter':
+        specifier: workspace:*
+        version: link:../canonical-filter
+      '@haulalert/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/load-model:
     dependencies:

@@ -1,5 +1,5 @@
 {
-  "name": "@haulalert/canonical-filter",
+  "name": "@haulalert/adapter-super-dispatch",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,11 +14,9 @@
   ],
   "scripts": {
     "build": "tsc --project tsconfig.json",
-    "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "node --test dist/index.test.js"
+    "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "dependencies": {
-    "@haulalert/shared": "workspace:*",
-    "zod": "^3.24.4"
+    "@haulalert/filter-compiler": "workspace:*"
   }
 }

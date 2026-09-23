@@ -1,5 +1,5 @@
 {
-  "name": "@haulalert/canonical-filter",
+  "name": "@haulalert/filter-compiler",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -18,7 +18,7 @@
     "test": "node --test dist/index.test.js"
   },
   "dependencies": {
-    "@haulalert/shared": "workspace:*",
-    "zod": "^3.24.4"
+    "@haulalert/canonical-filter": "workspace:*",
+    "@haulalert/shared": "workspace:*"
   }
 }
