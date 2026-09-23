@@ -47,6 +47,10 @@ export type DeliveryResult =
   | { readonly status: "duplicate"; readonly deliveryKey: string }
   | { readonly status: "in-flight"; readonly deliveryKey: string };
 
+export interface NewLoadDeliveryOptions {
+  readonly loadDetailsUrl?: string;
+}
+
 /** Delivers each matching new load at most once per user and alert. */
 export class NotificationService {
   public constructor(
@@ -56,7 +60,7 @@ export class NotificationService {
 
   public async deliverNewLoad(
     match: AlertMatch,
-    options: { readonly loadDetailsUrl?: string } = {}
+    options: NewLoadDeliveryOptions = {}
   ): Promise<DeliveryResult> {
     const deliveryKey = getDeliveryKey(match);
     const reservation = this.deliveryStore.tryReserve(deliveryKey);
@@ -83,3 +87,8 @@ export function getDeliveryKey(match: AlertMatch): string {
 }
 
 export { getTelegramBotToken, TelegramBotApiTransport } from "./telegram-bot-api-transport.js";
+export {
+  InMemoryNotificationDeliveryQueue,
+  type DeliveryQueueOutcome,
+  type NotificationRetryPolicy
+} from "./notification-delivery-queue.js";
