@@ -6,6 +6,7 @@ import {
   type MiniAppAlert,
   type MiniAppDashboard
 } from "./api.js";
+import { locationFromForm } from "./location-form.js";
 
 interface TelegramWebApp {
   readonly initData: string;
@@ -103,7 +104,8 @@ function createMarkup(): string {
   return `<form class="content form" id="alert-form">
     <p class="form-intro">Tell us which loads to watch. You can refine locations and preferences later.</p>
     <label>Alert name<input name="name" maxlength="80" placeholder="e.g. CA → AZ open loads" required /></label>
-    <div class="form-grid"><label>Origin state <input name="origin" maxlength="2" placeholder="Any" /></label><label>Destination state <input name="destination" maxlength="2" placeholder="Any" /></label></div>
+    ${locationFields("origin", "Origin")}
+    ${locationFields("destination", "Destination")}
     <div class="form-grid"><label>Trailer<select name="trailer"><option value="open">Open</option><option value="enclosed">Enclosed</option></select></label><label>Minimum pay<input name="minimumPay" type="number" min="0" step="50" placeholder="Any" /></label></div>
     <div class="form-grid"><label>Min vehicles<input name="minimumVehicles" type="number" min="1" step="1" placeholder="Any" /></label><label>Max vehicles<input name="maximumVehicles" type="number" min="1" step="1" placeholder="Any" /></label></div>
     <fieldset><legend>Load boards</legend><label class="check"><input type="checkbox" name="provider" value="central-dispatch" checked />Central Dispatch</label><label class="check"><input type="checkbox" name="provider" value="super-dispatch" checked />Super Dispatch</label><label class="check"><input type="checkbox" name="provider" value="shipcars" checked />Ship.Cars</label></fieldset>
@@ -111,14 +113,39 @@ function createMarkup(): string {
   </form>`;
 }
 
+function locationFields(prefix: "origin" | "destination", label: string): string {
+  return `<fieldset class="location-group" data-location-group="${prefix}">
+    <legend>${label}</legend>
+    <label>Match location<select name="${prefix}Kind" data-location-kind="${prefix}"><option value="state" selected>State</option><option value="city">City + radius</option><option value="anywhere">Anywhere</option></select></label>
+    <div class="location-state-fields" data-location-required><label>${label} state <input name="${prefix}State" maxlength="2" placeholder="CA" autocapitalize="characters" /></label></div>
+    <div class="location-city-fields" data-city-fields hidden>
+      <label>${label} city <input name="${prefix}City" maxlength="80" placeholder="Los Angeles" /></label>
+      <div class="form-grid"><label>Radius (miles)<input name="${prefix}Radius" type="number" min="1" max="500" step="1" placeholder="75" /></label><label>${label} latitude<input name="${prefix}Latitude" type="number" min="-90" max="90" step="0.0001" placeholder="34.0522" /></label></div>
+      <label>${label} longitude<input name="${prefix}Longitude" type="number" min="-180" max="180" step="0.0001" placeholder="-118.2437" /></label>
+      <p class="location-help">For a city radius, use the coordinates from your map app. This keeps the match exact.</p>
+    </div>
+  </fieldset>`;
+}
+
 function bindInteractions(): void {
   app.querySelectorAll<HTMLElement>("[data-screen]").forEach((element) => {
     element.addEventListener("click", () => { screen = element.dataset.screen === "create" ? "create" : "dashboard"; message = ""; render(); });
   });
   app.querySelector<HTMLFormElement>("#alert-form")?.addEventListener("submit", (event) => { void createAlert(event); });
+  app.querySelectorAll<HTMLSelectElement>("[data-location-kind]").forEach((select) => {
+    select.addEventListener("change", () => updateLocationFields(select));
+    updateLocationFields(select);
+  });
   app.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((button) => {
     button.addEventListener("click", () => { void manageAlert(button); });
   });
+}
+
+function updateLocationFields(select: HTMLSelectElement): void {
+  const group = select.closest<HTMLElement>("[data-location-group]");
+  if (group === null) return;
+  group.querySelectorAll<HTMLElement>("[data-location-required]").forEach((element) => { element.hidden = select.value === "anywhere"; });
+  group.querySelectorAll<HTMLElement>("[data-city-fields]").forEach((element) => { element.hidden = select.value !== "city"; });
 }
 
 async function createAlert(event: SubmitEvent): Promise<void> {
@@ -178,8 +205,8 @@ function filterFromForm(form: HTMLFormElement): CanonicalFilter {
   return {
     schemaVersion: 1,
     name: requiredText(data.get("name"), "Name"),
-    origins: [stateOrAnywhere(data.get("origin"))],
-    destinations: [stateOrAnywhere(data.get("destination"))],
+    origins: [locationFromForm(data, "origin")],
+    destinations: [locationFromForm(data, "destination")],
     trailerTypes: [data.get("trailer") === "enclosed" ? "enclosed" : "open"],
     vehicles: { minimum, maximum },
     readiness: { kind: "any" },
@@ -188,13 +215,6 @@ function filterFromForm(form: HTMLFormElement): CanonicalFilter {
     providers,
     blockedBrokerIds: []
   };
-}
-
-function stateOrAnywhere(value: FormDataEntryValue | null): CanonicalFilter["origins"][number] {
-  const state = typeof value === "string" ? value.trim().toUpperCase() : "";
-  if (state === "") return { kind: "anywhere" };
-  if (!/^[A-Z]{2}$/.test(state)) throw new Error("Use a two-letter state code, such as CA.");
-  return { kind: "state", state };
 }
 
 function numberOrNull(value: FormDataEntryValue | null): number | null {
