@@ -31,6 +31,21 @@ describe("Telegram Bot onboarding", () => {
     }]);
   });
 
+  it("attributes only a first-time account from a valid referral start parameter", async () => {
+    let input: { readonly telegramUserId: string; readonly telegramChatId: string; readonly referralCode?: string } | undefined;
+    const service = new TelegramBotOnboardingService({
+      upsert: async (value) => {
+        input = value;
+        return { userId: "user-2", isNew: true };
+      }
+    }, { sendText: async () => undefined });
+
+    assert.deepEqual(await service.handle({
+      message: { text: "/start ref_a7k92d4f", from: { id: 12345 }, chat: { id: 12345, type: "private" } }
+    }), { status: "onboarded", userId: "user-2", isNew: true });
+    assert.deepEqual(input, { telegramUserId: "12345", telegramChatId: "12345", referralCode: "A7K92D4F" });
+  });
+
   it("ignores non-private messages and non-start commands", async () => {
     const service = new TelegramBotOnboardingService(
       { upsert: async () => ({ userId: "user-1", isNew: true }) },
@@ -60,6 +75,7 @@ describe("Telegram Bot onboarding", () => {
       isNew: false
     });
     assert.match(statements[0] ?? "", /ON CONFLICT/);
+    assert.match(statements[0] ?? "", /attributed_referral/);
     assert.match(statements[1] ?? "", /UPDATE users/);
   });
 

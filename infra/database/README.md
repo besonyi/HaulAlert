@@ -12,6 +12,7 @@ psql "$DATABASE_URL" -f infra/database/migrations/0004_browser_runtime_metadata.
 psql "$DATABASE_URL" -f infra/database/migrations/0005_browser_tab_recovery_backoff.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0006_plans_and_subscriptions.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0007_free_and_essential_plans.sql
+psql "$DATABASE_URL" -f infra/database/migrations/0008_referral_attribution.sql
 ```
 
 The application must use three transactional patterns:

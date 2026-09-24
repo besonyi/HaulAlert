@@ -48,6 +48,7 @@ test("Mini App API authenticates identity and scopes alert operations to it", as
       assertCanCreateAlert: async () => {},
       cancelAtPeriodEnd: async () => ({ planId: "starter", cancelAtPeriodEnd: true })
     },
+    referrals: { getForUser: async () => ({ code: "A7K92D4F", activePaid: 2 }) },
     authenticate: (initData) => {
       assert.equal(initData, "verified-init-data");
       return { id: userId, firstName: "Alex" };
@@ -78,6 +79,9 @@ test("Mini App API authenticates identity and scopes alert operations to it", as
     assert.equal(entitlement.status, 200);
     assert.equal((await entitlement.json() as { entitlement: { planId: string } }).entitlement.planId, "starter");
     assert.equal((await fetch(`${baseUrl}/v1/account/subscription/cancel`, { method: "POST", headers })).status, 200);
+    const referral = await fetch(`${baseUrl}/v1/referrals`, { headers });
+    assert.equal(referral.status, 200);
+    assert.equal((await referral.json() as { referral: { code: string } }).referral.code, "A7K92D4F");
 
     const pause = await fetch(`${baseUrl}/v1/alerts/${alertId}/pause`, { method: "POST", headers });
     assert.equal(pause.status, 200);

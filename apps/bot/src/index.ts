@@ -1,7 +1,7 @@
 import type { SqlExecutor } from "@haulalert/notification-service";
 
 export interface TelegramIdentityStore {
-  upsert(input: { readonly telegramUserId: string; readonly telegramChatId: string }): Promise<{
+  upsert(input: { readonly telegramUserId: string; readonly telegramChatId: string; readonly referralCode?: string }): Promise<{
     readonly userId: string;
     readonly isNew: boolean;
   }>;
@@ -14,13 +14,24 @@ export class PostgresTelegramIdentityStore implements TelegramIdentityStore {
   public async upsert(input: {
     readonly telegramUserId: string;
     readonly telegramChatId: string;
+    readonly referralCode?: string;
   }): Promise<{ readonly userId: string; readonly isNew: boolean }> {
     const inserted = await this.database.query(
-      `INSERT INTO users (telegram_user_id, telegram_chat_id)
-      VALUES ($1::bigint, $2::bigint)
-      ON CONFLICT (telegram_user_id) DO NOTHING
-      RETURNING id`,
-      [input.telegramUserId, input.telegramChatId]
+      `WITH created_user AS (
+        INSERT INTO users (telegram_user_id, telegram_chat_id)
+        VALUES ($1::bigint, $2::bigint)
+        ON CONFLICT (telegram_user_id) DO NOTHING
+        RETURNING id
+      ), attributed_referral AS (
+        INSERT INTO referrals (referrer_user_id, referred_user_id, referral_code_id)
+        SELECT referral_codes.user_id, created_user.id, referral_codes.id
+        FROM created_user
+        INNER JOIN referral_codes ON referral_codes.code = $3::text AND referral_codes.is_active
+        WHERE referral_codes.user_id <> created_user.id
+        ON CONFLICT (referred_user_id) DO NOTHING
+      )
+      SELECT id FROM created_user`,
+      [input.telegramUserId, input.telegramChatId, input.referralCode ?? null]
     );
     const insertedId = getRowId(inserted.rows[0]);
     if (insertedId !== undefined) return { userId: insertedId, isNew: true };
@@ -93,7 +104,12 @@ export class TelegramBotOnboardingService {
 
     const telegramUserId = normalizeTelegramId(message.from.id);
     const telegramChatId = normalizeTelegramId(message.chat.id);
-    const account = await this.identities.upsert({ telegramUserId, telegramChatId });
+    const referralCode = referralCodeFromStartCommand(message.text);
+    const account = await this.identities.upsert({
+      telegramUserId,
+      telegramChatId,
+      ...(referralCode === undefined ? {} : { referralCode })
+    });
     await this.transport.sendText(telegramChatId, welcomeText(account.isNew));
     return { status: "onboarded", ...account };
   }
@@ -146,6 +162,11 @@ function getRowId(row: Record<string, unknown> | undefined): string | undefined 
 
 function isStartCommand(text: string | undefined): boolean {
   return text !== undefined && /^\/start(?:@[A-Za-z0-9_]+)?(?:\s|$)/i.test(text.trim());
+}
+
+function referralCodeFromStartCommand(text: string | undefined): string | undefined {
+  const match = text?.trim().match(/^\/start(?:@[A-Za-z0-9_]+)?\s+ref_([A-Za-z0-9]{8})$/i);
+  return match?.[1]?.toUpperCase();
 }
 
 function normalizeTelegramId(value: string | number): string {

@@ -23,6 +23,9 @@ export interface MiniAppApiDependencies {
     assertCanCreateAlert(userId: string): Promise<void>;
     cancelAtPeriodEnd(userId: string): Promise<unknown | undefined>;
   };
+  readonly referrals?: {
+    getForUser(userId: string): Promise<unknown>;
+  };
   readonly isAdmin?: (telegramUserId: string) => boolean;
   readonly authenticate: (initData: string) => AuthenticatedApiUser | Promise<AuthenticatedApiUser>;
 }
@@ -81,6 +84,10 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       if (dependencies.entitlements === undefined) return { statusCode: 404, body: { error: "not_found" } };
       const entitlement = await dependencies.entitlements.cancelAtPeriodEnd(user.id);
       return entitlement === undefined ? { statusCode: 409, body: { error: "subscription_unavailable" } } : { statusCode: 200, body: { entitlement } };
+    }
+    if (pathname === "/v1/referrals" && request.method === "GET") {
+      if (dependencies.referrals === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      return { statusCode: 200, body: { referral: await dependencies.referrals.getForUser(user.id) } };
     }
     if (pathname === "/v1/dashboard" && request.method === "GET") {
       return { statusCode: 200, body: { dashboard: await dependencies.dashboard.getForUser(user.id) } };
