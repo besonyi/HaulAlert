@@ -16,10 +16,10 @@ export class CentralDispatchSearchSynchronizer {
     const searches = await this.source.listActiveCentralDispatchSearches();
     for (const search of searches) {
       const activated = await this.durableRuntime.activateProviderSearch(this.orchestrator, search, search.id);
-      if (activated.reused && !this.configuredSearchIds.has(search.id)) {
+      if (activated.reused && !activated.recoveryDeferred && !this.configuredSearchIds.has(search.id)) {
         await this.durableRuntime.reconfigureProviderSearch(this.orchestrator, activated.tab, search);
       }
-      this.configuredSearchIds.add(search.id);
+      if (!activated.recoveryDeferred) this.configuredSearchIds.add(search.id);
     }
     await this.durableRuntime.closeInactiveProviderSearchTabs(
       "central-dispatch",

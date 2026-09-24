@@ -11,7 +11,7 @@ describe("durable browser runtime controller", () => {
     const store: BrowserRuntimeSnapshotStore = {
       load: async () => ({
         sessions: [{ id: "central-1", provider: "central-dispatch", status: "healthy", createdAt: "2026-09-24T12:00:00.000Z", lastHeartbeatAt: null }],
-        tabs: [{ id: "tab-1", providerSearchId: null, sessionId: "central-1", provider: "central-dispatch", sourceFilterHash: "hash", status: "ready", createdAt: "2026-09-24T12:00:00.000Z", lastScanAt: null }]
+        tabs: [{ id: "tab-1", providerSearchId: null, sessionId: "central-1", provider: "central-dispatch", sourceFilterHash: "hash", status: "ready", createdAt: "2026-09-24T12:00:00.000Z", lastScanAt: null, recoveryAttemptCount: 0, nextRecoveryAt: null }]
       }),
       save: async () => undefined
     };

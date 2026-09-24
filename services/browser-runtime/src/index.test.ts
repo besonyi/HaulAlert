@@ -71,14 +71,16 @@ describe("browser runtime orchestrator", () => {
   });
 
   it("keeps a degraded durable tab available when recovery configuration fails", async () => {
-    const runtime = createRuntime();
+    let now = new Date("2026-09-24T12:00:00.000Z");
+    const runtime = createRuntime(() => now);
     const initial = runtime.reserveSearchTab({
       provider: "central-dispatch",
       sourceFilterHash: "source-hash",
       providerSearchId: "11111111-1111-4111-8111-111111111111"
     });
     runtime.markTabReady(initial.tab.id);
-    runtime.markTabDegraded(initial.tab.id);
+    const degraded = runtime.markTabDegraded(initial.tab.id);
+    now = new Date(degraded.nextRecoveryAt ?? now);
     const orchestrator = new BrowserRuntimeOrchestrator(runtime, {
       configureSearch: async () => { throw new Error("Central Dispatch navigation failed"); }
     });

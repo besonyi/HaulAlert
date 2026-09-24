@@ -21,6 +21,10 @@ export interface PersistentSearchTab {
   readonly status: SearchTabStatus;
   readonly createdAt: string;
   readonly lastScanAt: string | null;
+  /** Consecutive failed recovery attempts for this durable search tab. */
+  readonly recoveryAttemptCount: number;
+  /** Earliest safe time to configure this degraded tab again. */
+  readonly nextRecoveryAt: string | null;
 }
 
 export interface SearchTabReservation {
@@ -28,6 +32,8 @@ export interface SearchTabReservation {
   readonly reused: boolean;
   /** True when a degraded durable tab is being configured again after a failure. */
   readonly recovered: boolean;
+  /** True when a degraded durable tab is still waiting for its recovery backoff. */
+  readonly recoveryDeferred: boolean;
 }
 
 /** Serializable runtime metadata; browser credentials are intentionally absent. */
@@ -53,6 +59,10 @@ export class UnknownRuntimeResourceError extends Error {
 export interface BrowserRuntimeOptions {
   readonly now?: () => Date;
   readonly createTabId?: () => string;
+  /** First recovery delay after a failed tab operation. Defaults to 30 seconds. */
+  readonly recoveryBaseDelayMs?: number;
+  /** Upper bound for exponential recovery delay. Defaults to 15 minutes. */
+  readonly recoveryMaxDelayMs?: number;
 }
 
 /**
@@ -65,10 +75,20 @@ export class BrowserRuntime {
   private readonly tabs = new Map<string, PersistentSearchTab>();
   private readonly now: () => Date;
   private readonly createTabId: () => string;
+  private readonly recoveryBaseDelayMs: number;
+  private readonly recoveryMaxDelayMs: number;
 
   public constructor(options: BrowserRuntimeOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.createTabId = options.createTabId ?? (() => crypto.randomUUID());
+    this.recoveryBaseDelayMs = options.recoveryBaseDelayMs ?? 30_000;
+    this.recoveryMaxDelayMs = options.recoveryMaxDelayMs ?? 15 * 60_000;
+    if (!Number.isFinite(this.recoveryBaseDelayMs) || this.recoveryBaseDelayMs < 1) {
+      throw new Error("recoveryBaseDelayMs must be a positive number");
+    }
+    if (!Number.isFinite(this.recoveryMaxDelayMs) || this.recoveryMaxDelayMs < this.recoveryBaseDelayMs) {
+      throw new Error("recoveryMaxDelayMs must be at least recoveryBaseDelayMs");
+    }
   }
 
   /** Rehydrates metadata after a process restart without restoring credentials. */
@@ -139,26 +159,33 @@ export class BrowserRuntime {
     });
 
     if (reusableTab !== undefined) {
-      return { tab: reusableTab, reused: true, recovered: false };
+      return { tab: reusableTab, reused: true, recovered: false, recoveryDeferred: false };
     }
 
     // A scan failure can temporarily degrade a tab while its browser session is
     // still healthy. Re-provision that same durable provider search instead of
     // allocating a new tab on every recovery cycle.
-    const recoverableTab = [...this.tabs.values()].find((tab) => {
+    const degradedTabs = [...this.tabs.values()].filter((tab) => {
       const session = this.sessions.get(tab.sessionId);
       return tab.provider === input.provider
         && tab.sourceFilterHash === input.sourceFilterHash
         && tab.status === "degraded"
         && session?.status === "healthy";
     });
+    const recoverableTab = degradedTabs.find((tab) => this.recoveryIsDue(tab));
 
     if (recoverableTab !== undefined) {
       return {
         tab: this.updateTab(recoverableTab.id, { status: "provisioning" }),
         reused: false,
-        recovered: true
+        recovered: true,
+        recoveryDeferred: false
       };
+    }
+
+    const deferredRecoveryTab = degradedTabs[0];
+    if (deferredRecoveryTab !== undefined) {
+      return { tab: deferredRecoveryTab, reused: true, recovered: false, recoveryDeferred: true };
     }
 
     const session = this.pickHealthySession(input.provider);
@@ -170,19 +197,27 @@ export class BrowserRuntime {
       sourceFilterHash: input.sourceFilterHash,
       status: "provisioning",
       createdAt: this.timestamp(),
-      lastScanAt: null
+      lastScanAt: null,
+      recoveryAttemptCount: 0,
+      nextRecoveryAt: null
     };
 
     this.tabs.set(tab.id, tab);
-    return { tab, reused: false, recovered: false };
+    return { tab, reused: false, recovered: false, recoveryDeferred: false };
   }
 
   public markTabReady(id: string): PersistentSearchTab {
-    return this.updateTab(id, { status: "ready" });
+    return this.updateTab(id, { status: "ready", recoveryAttemptCount: 0, nextRecoveryAt: null });
   }
 
   public markTabDegraded(id: string): PersistentSearchTab {
-    return this.updateTab(id, { status: "degraded" });
+    const tab = this.getTab(id);
+    const recoveryAttemptCount = tab.recoveryAttemptCount + 1;
+    return this.updateTab(id, {
+      status: "degraded",
+      recoveryAttemptCount,
+      nextRecoveryAt: new Date(this.now().getTime() + this.recoveryDelay(recoveryAttemptCount)).toISOString()
+    });
   }
 
   public recordScan(id: string): PersistentSearchTab {
@@ -255,6 +290,16 @@ export class BrowserRuntime {
     const updated = { ...tab, ...update };
     this.tabs.set(id, updated);
     return updated;
+  }
+
+  private recoveryIsDue(tab: PersistentSearchTab): boolean {
+    if (tab.nextRecoveryAt === null) return true;
+    const nextRecoveryAt = new Date(tab.nextRecoveryAt);
+    return Number.isNaN(nextRecoveryAt.getTime()) || nextRecoveryAt <= this.now();
+  }
+
+  private recoveryDelay(attempt: number): number {
+    return Math.min(this.recoveryBaseDelayMs * (2 ** Math.min(attempt - 1, 30)), this.recoveryMaxDelayMs);
   }
 
   private timestamp(): string {

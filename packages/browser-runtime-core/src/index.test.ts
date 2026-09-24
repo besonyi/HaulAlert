@@ -26,7 +26,8 @@ describe("browser runtime", () => {
   });
 
   it("re-provisions a degraded tab instead of allocating another one", () => {
-    const runtime = createRuntime();
+    let now = new Date("2026-09-22T12:00:00.000Z");
+    const runtime = new BrowserRuntime({ now: () => now, createTabId: () => "tab-1" });
     runtime.registerSession({ id: "central-1", provider: "central-dispatch" });
 
     const first = runtime.reserveSearchTab({
@@ -35,15 +36,42 @@ describe("browser runtime", () => {
       providerSearchId: "11111111-1111-4111-8111-111111111111"
     });
     runtime.markTabReady(first.tab.id);
-    runtime.markTabDegraded(first.tab.id);
+    const degraded = runtime.markTabDegraded(first.tab.id);
+    now = new Date(degraded.nextRecoveryAt ?? now);
     const recovery = runtime.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "hash-a" });
 
     assert.equal(recovery.reused, false);
     assert.equal(recovery.recovered, true);
+    assert.equal(recovery.recoveryDeferred, false);
     assert.equal(recovery.tab.id, first.tab.id);
     assert.equal(recovery.tab.providerSearchId, first.tab.providerSearchId);
     assert.equal(recovery.tab.status, "provisioning");
     assert.equal(runtime.listTabs().length, 1);
+  });
+
+  it("defers degraded-tab recovery until its exponential backoff expires", () => {
+    let now = new Date("2026-09-24T12:00:00.000Z");
+    const runtime = new BrowserRuntime({
+      now: () => now,
+      createTabId: () => "tab-1",
+      recoveryBaseDelayMs: 30_000,
+      recoveryMaxDelayMs: 120_000
+    });
+    runtime.registerSession({ id: "central-1", provider: "central-dispatch" });
+    const initial = runtime.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "hash-a" });
+    runtime.markTabReady(initial.tab.id);
+    const degraded = runtime.markTabDegraded(initial.tab.id);
+
+    const deferred = runtime.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "hash-a" });
+    now = new Date("2026-09-24T12:00:30.000Z");
+    const recovered = runtime.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "hash-a" });
+
+    assert.equal(degraded.recoveryAttemptCount, 1);
+    assert.equal(degraded.nextRecoveryAt, "2026-09-24T12:00:30.000Z");
+    assert.equal(deferred.reused, true);
+    assert.equal(deferred.recoveryDeferred, true);
+    assert.equal(recovered.recovered, true);
+    assert.equal(recovered.tab.status, "provisioning");
   });
 
   it("balances new tabs across healthy sessions", () => {
@@ -118,7 +146,7 @@ describe("browser runtime", () => {
     const runtime = createRuntime();
     assert.throws(() => runtime.restore({
       sessions: [{ id: "central-1", provider: "central-dispatch", status: "healthy", createdAt: "2026-09-24T00:00:00.000Z", lastHeartbeatAt: null }],
-      tabs: [{ id: "tab-1", providerSearchId: null, sessionId: "central-1", provider: "shipcars", sourceFilterHash: "hash", status: "ready", createdAt: "2026-09-24T00:00:00.000Z", lastScanAt: null }]
+      tabs: [{ id: "tab-1", providerSearchId: null, sessionId: "central-1", provider: "shipcars", sourceFilterHash: "hash", status: "ready", createdAt: "2026-09-24T00:00:00.000Z", lastScanAt: null, recoveryAttemptCount: 0, nextRecoveryAt: null }]
     }), /does not belong/);
   });
 });

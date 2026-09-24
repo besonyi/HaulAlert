@@ -15,7 +15,9 @@ function tab(id: string, lastScanAt: string | null, status: PersistentSearchTab[
     sourceFilterHash: `filter-${id}`,
     status,
     createdAt: "2026-09-23T12:00:00.000Z",
-    lastScanAt
+    lastScanAt,
+    recoveryAttemptCount: 0,
+    nextRecoveryAt: null
   };
 }
 

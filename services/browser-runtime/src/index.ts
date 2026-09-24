@@ -79,6 +79,8 @@ export interface ProviderSearchDriver {
 export interface ActivatedSearch {
   readonly tab: PersistentSearchTab;
   readonly reused: boolean;
+  readonly recovered: boolean;
+  readonly recoveryDeferred: boolean;
 }
 
 /**
@@ -152,7 +154,9 @@ export class BrowserRuntimeOrchestrator {
 
       return {
         tab: this.runtime.markTabReady(reservation.tab.id),
-        reused: false
+        reused: false,
+        recovered: reservation.recovered,
+        recoveryDeferred: false
       };
     } catch (error) {
       // Keep the durable search identity available for a later recovery when

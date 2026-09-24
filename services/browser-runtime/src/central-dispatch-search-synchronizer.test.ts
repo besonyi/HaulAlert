@@ -18,7 +18,9 @@ describe("Central Dispatch search synchronizer", () => {
       sourceFilterHash: "source-hash",
       status: "ready",
       createdAt: "2026-09-24T12:00:00.000Z",
-      lastScanAt: null
+      lastScanAt: null,
+      recoveryAttemptCount: 0,
+      nextRecoveryAt: null
     };
     const durableRuntime: Pick<DurableBrowserRuntimeController, "activateProviderSearch" | "reconfigureProviderSearch" | "closeInactiveProviderSearchTabs"> = {
       activateProviderSearch: async (
@@ -27,7 +29,7 @@ describe("Central Dispatch search synchronizer", () => {
         id: string
       ): Promise<ActivatedSearch> => {
         calls.push(["activate", search, id]);
-        return { tab, reused: true };
+        return { tab, reused: true, recovered: false, recoveryDeferred: false };
       },
       reconfigureProviderSearch: async (
         _orchestrator: BrowserRuntimeOrchestrator,
@@ -78,5 +80,51 @@ describe("Central Dispatch search synchronizer", () => {
       }, "11111111-1111-4111-8111-111111111111"],
       ["close", "central-dispatch", ["11111111-1111-4111-8111-111111111111"]]
     ]);
+  });
+
+  it("does not reconfigure a tab while its durable recovery backoff is pending", async () => {
+    const calls: string[] = [];
+    const tab: PersistentSearchTab = {
+      id: "tab-1",
+      providerSearchId: "11111111-1111-4111-8111-111111111111",
+      sessionId: "central-local",
+      provider: "central-dispatch",
+      sourceFilterHash: "source-hash",
+      status: "degraded",
+      createdAt: "2026-09-24T12:00:00.000Z",
+      lastScanAt: null,
+      recoveryAttemptCount: 1,
+      nextRecoveryAt: "2026-09-24T12:00:30.000Z"
+    };
+    const durableRuntime: Pick<DurableBrowserRuntimeController, "activateProviderSearch" | "reconfigureProviderSearch" | "closeInactiveProviderSearchTabs"> = {
+      activateProviderSearch: async (): Promise<ActivatedSearch> => {
+        calls.push("activate");
+        return { tab, reused: true, recovered: false, recoveryDeferred: true };
+      },
+      reconfigureProviderSearch: async () => {
+        calls.push("reconfigure");
+        return tab;
+      },
+      closeInactiveProviderSearchTabs: async () => {
+        calls.push("close");
+        return [];
+      }
+    };
+    const synchronizer = new CentralDispatchSearchSynchronizer(
+      {
+        listActiveCentralDispatchSearches: async () => [{
+          id: "11111111-1111-4111-8111-111111111111",
+          provider: "central-dispatch",
+          sourceFilterHash: "source-hash",
+          sourceFilter: { trailerTypes: ["open"] }
+        }]
+      } as unknown as PostgresProviderSearchSource,
+      durableRuntime as DurableBrowserRuntimeController,
+      {} as BrowserRuntimeOrchestrator
+    );
+
+    await synchronizer.synchronize();
+
+    assert.deepEqual(calls, ["activate", "close"]);
   });
 });
