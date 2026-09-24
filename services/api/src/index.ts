@@ -10,6 +10,8 @@ import {
 import { normalizedLoadSchema, type NormalizedLoad } from "@haulalert/load-model";
 import type { SqlExecutor } from "@haulalert/notification-service";
 
+export { PostgresAdminDashboardRepository, type AdminSystemOverview, type OperationalCount } from "./admin-dashboard.js";
+
 export type ManagedAlertStatus = "active" | "paused";
 
 export interface ManagedAlert {
