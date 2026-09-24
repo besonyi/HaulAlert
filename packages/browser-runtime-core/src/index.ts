@@ -28,6 +28,12 @@ export interface SearchTabReservation {
   readonly reused: boolean;
 }
 
+/** Serializable runtime metadata; browser credentials are intentionally absent. */
+export interface BrowserRuntimeSnapshot {
+  readonly sessions: readonly BrowserSession[];
+  readonly tabs: readonly PersistentSearchTab[];
+}
+
 export class NoHealthySessionError extends Error {
   public constructor(provider: SupportedProvider) {
     super(`No healthy browser session is available for provider: ${provider}`);
@@ -61,6 +67,33 @@ export class BrowserRuntime {
   public constructor(options: BrowserRuntimeOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.createTabId = options.createTabId ?? (() => crypto.randomUUID());
+  }
+
+  /** Rehydrates metadata after a process restart without restoring credentials. */
+  public restore(snapshot: BrowserRuntimeSnapshot): void {
+    if (this.sessions.size > 0 || this.tabs.size > 0) {
+      throw new Error("Browser runtime state can only be restored into an empty runtime");
+    }
+    for (const session of snapshot.sessions) {
+      if (this.sessions.has(session.id)) throw new Error(`Duplicate restored browser session: ${session.id}`);
+      this.sessions.set(session.id, { ...session });
+    }
+    for (const tab of snapshot.tabs) {
+      if (this.tabs.has(tab.id)) throw new Error(`Duplicate restored browser tab: ${tab.id}`);
+      const session = this.sessions.get(tab.sessionId);
+      if (session === undefined || session.provider !== tab.provider) {
+        throw new Error(`Restored tab ${tab.id} does not belong to a matching browser session`);
+      }
+      this.tabs.set(tab.id, { ...tab });
+    }
+  }
+
+  /** Returns a credential-free, deterministic snapshot suitable for durable storage. */
+  public snapshot(): BrowserRuntimeSnapshot {
+    return {
+      sessions: this.listSessions().map((session) => ({ ...session })).sort((left, right) => left.id.localeCompare(right.id)),
+      tabs: this.listTabs().map((tab) => ({ ...tab })).sort((left, right) => left.id.localeCompare(right.id))
+    };
   }
 
   public registerSession(input: { id: string; provider: SupportedProvider }): BrowserSession {

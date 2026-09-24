@@ -73,4 +73,31 @@ describe("browser runtime", () => {
 
     assert.deepEqual(runtime.listScannableTabs().map(({ id }) => id), [healthy.tab.id]);
   });
+
+  it("restores a credential-free snapshot and preserves tab allocation", () => {
+    const original = createRuntime();
+    original.registerSession({ id: "central-1", provider: "central-dispatch" });
+    const reservation = original.reserveSearchTab({
+      provider: "central-dispatch",
+      sourceFilterHash: "hash-a",
+      providerSearchId: "11111111-1111-4111-8111-111111111111"
+    });
+    original.markTabReady(reservation.tab.id);
+
+    const restored = createRuntime();
+    restored.restore(original.snapshot());
+    const reused = restored.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "hash-a" });
+
+    assert.equal(reused.reused, true);
+    assert.equal(reused.tab.id, reservation.tab.id);
+    assert.deepEqual(restored.snapshot(), original.snapshot());
+  });
+
+  it("rejects a restored tab that points at a foreign provider session", () => {
+    const runtime = createRuntime();
+    assert.throws(() => runtime.restore({
+      sessions: [{ id: "central-1", provider: "central-dispatch", status: "healthy", createdAt: "2026-09-24T00:00:00.000Z", lastHeartbeatAt: null }],
+      tabs: [{ id: "tab-1", providerSearchId: null, sessionId: "central-1", provider: "shipcars", sourceFilterHash: "hash", status: "ready", createdAt: "2026-09-24T00:00:00.000Z", lastScanAt: null }]
+    }), /does not belong/);
+  });
 });
