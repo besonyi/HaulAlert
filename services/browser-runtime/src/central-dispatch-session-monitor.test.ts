@@ -5,6 +5,7 @@ import { BrowserRuntime } from "@haulalert/browser-runtime-core";
 
 import { CentralDispatchSessionMonitor } from "./central-dispatch-session-monitor.js";
 import type { ChromeDevToolsTarget } from "./central-dispatch-cdp-executor.js";
+import type { BrowserRuntimeSnapshotStore } from "./durable-runtime-controller.js";
 
 const target: ChromeDevToolsTarget = {
   id: "central-tab",
@@ -67,5 +68,31 @@ describe("Central Dispatch session monitor", () => {
 
     assert.equal(result.status, "healthy");
     assert.equal(result.session.lastHeartbeatAt, "2026-09-24T12:00:00.000Z");
+  });
+
+  it("persists the new health state without storing browser credentials", async () => {
+    const runtime = createBrowserRuntime();
+    const snapshots: unknown[] = [];
+    const store: BrowserRuntimeSnapshotStore = {
+      load: async () => ({ sessions: [], tabs: [] }),
+      save: async (snapshot) => { snapshots.push(snapshot); }
+    };
+    const monitor = new CentralDispatchSessionMonitor(runtime, {
+      findCentralDispatchTarget: async () => { throw new Error("Central Dispatch tab closed"); },
+      evaluateJson: async () => undefined
+    }, "central-local", store);
+
+    await monitor.probe();
+
+    assert.deepEqual(snapshots, [{
+      sessions: [{
+        id: "central-local",
+        provider: "central-dispatch",
+        status: "offline",
+        createdAt: "2026-09-24T12:00:00.000Z",
+        lastHeartbeatAt: null
+      }],
+      tabs: []
+    }]);
   });
 });
