@@ -12,8 +12,11 @@ import {
   TransactionalLoadIngestionService,
   type ScanHistoryRecorder,
   PostgresLoadRepository,
+  PostgresAsyncSeenLoadStore,
   ScanIngestionProcessor,
   type AlertMatchFinder,
+  type LoadDetector,
+  type LoadIngestion,
   type LoadPersistence
 } from "./index.js";
 import type { TransactionalLoadOutbox } from "./postgres-load-delivery-outbox.js";
@@ -139,6 +142,70 @@ describe("durable load ingestion", () => {
     assert.deepEqual(seeded.ingestions, []);
     assert.deepEqual(detected.scan.newLoads.map(({ providerLoadId }) => providerLoadId), ["newer-829182"]);
     assert.deepEqual(recordedLoadIds, ["newer-829182"]);
+  });
+
+  it("acknowledges an asynchronous detector only after its rows are ingested", async () => {
+    const acknowledgements: string[] = [];
+    const detector: LoadDetector = {
+      inspect: async () => ({
+        newLoads: [load],
+        seeded: false,
+        boundaryFound: true,
+        overflowRisk: false
+      }),
+      acknowledge: async (_scan, result) => {
+        acknowledgements.push(...result.newLoads.map(({ providerLoadId }) => providerLoadId));
+      }
+    };
+    const ingestion: LoadIngestion = { ingest: async () => ({ status: "known", load }) };
+
+    await new ScanIngestionProcessor(detector, ingestion).process({
+      searchId: "central:hash",
+      loads: [load],
+      isTruncated: false
+    });
+
+    assert.deepEqual(acknowledgements, ["829181"]);
+  });
+
+  it("does not acknowledge a detector when durable ingestion fails", async () => {
+    let acknowledged = false;
+    const detector: LoadDetector = {
+      inspect: () => ({ newLoads: [load], seeded: false, boundaryFound: true, overflowRisk: false }),
+      acknowledge: () => { acknowledged = true; }
+    };
+    const ingestion: LoadIngestion = { ingest: async () => { throw new Error("database unavailable"); } };
+
+    await assert.rejects(
+      () => new ScanIngestionProcessor(detector, ingestion).process({
+        searchId: "central:hash",
+        loads: [load],
+        isTruncated: false
+      }),
+      /database unavailable/
+    );
+    assert.equal(acknowledged, false);
+  });
+
+  it("uses provider-scoped durable seen-load state", async () => {
+    const statements: string[] = [];
+    const database: SqlExecutor = {
+      query: async (statement) => {
+        statements.push(statement);
+        return { rows: [] };
+      }
+    };
+    const store = new PostgresAsyncSeenLoadStore(database);
+
+    assert.equal(await store.isSearchInitialized("central:hash"), false);
+    assert.equal(await store.has("central:hash", "central-dispatch:829181"), false);
+    await store.add("central:hash", "central-dispatch:829181");
+    await store.markSearchInitialized("central:hash");
+
+    assert.match(statements[0] ?? "", /search_initializations/);
+    assert.match(statements[1] ?? "", /search_seen_loads/);
+    assert.match(statements[2] ?? "", /INSERT INTO search_seen_loads/);
+    assert.match(statements[3] ?? "", /INSERT INTO search_initializations/);
   });
 
   it("does not replay durable ingestion when scan history recording fails", async () => {

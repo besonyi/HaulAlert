@@ -1,7 +1,6 @@
 import { type AlertMatch } from "@haulalert/alert-matcher";
 import type { NormalizedLoad } from "@haulalert/load-model";
 import {
-  NewLoadDetector,
   type NewLoadScanResult,
   type OrderedLoadScan
 } from "@haulalert/new-load-detector";
@@ -23,6 +22,12 @@ export interface AlertMatchFinder {
 
 export interface LoadIngestion {
   ingest(load: NormalizedLoad, now?: Date): Promise<IngestionResult>;
+}
+
+/** A detector may use durable storage and therefore inspect asynchronously. */
+export interface LoadDetector {
+  inspect(scan: OrderedLoadScan): NewLoadScanResult | Promise<NewLoadScanResult>;
+  acknowledge?(scan: OrderedLoadScan, result: NewLoadScanResult): void | Promise<void>;
 }
 
 /** Stores normalized loads once globally, while updating their latest observation. */
@@ -139,13 +144,14 @@ export interface ScannedIngestionResult {
  */
 export class ScanIngestionProcessor {
   public constructor(
-    private readonly detector: NewLoadDetector,
+    private readonly detector: LoadDetector,
     private readonly ingestion: LoadIngestion
   ) {}
 
   public async process(scan: OrderedLoadScan, now: Date = new Date()): Promise<ScannedIngestionResult> {
-    const detection = this.detector.inspect(scan);
+    const detection = await this.detector.inspect(scan);
     const ingestions = await Promise.all(detection.newLoads.map((load) => this.ingestion.ingest(load, now)));
+    await this.detector.acknowledge?.(scan, detection);
     return { scan: detection, ingestions };
   }
 
@@ -190,3 +196,4 @@ export {
   type TransactionalLoadOutbox,
   type TransactionalLoadOutboxResult
 } from "./postgres-load-delivery-outbox.js";
+export { PostgresAsyncSeenLoadStore } from "./postgres-async-seen-load-store.js";

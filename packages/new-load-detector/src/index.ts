@@ -94,3 +94,53 @@ export class NewLoadDetector {
     };
   }
 }
+
+export interface AsyncSeenLoadStore {
+  has(searchId: string, loadKey: string): Promise<boolean>;
+  add(searchId: string, loadKey: string): Promise<void>;
+  isSearchInitialized(searchId: string): Promise<boolean>;
+  markSearchInitialized(searchId: string): Promise<void>;
+}
+
+/**
+ * Durable-friendly detector. Its new rows are acknowledged only after the
+ * caller has durably processed them, allowing a restart to safely replay an
+ * unacknowledged top window through the idempotent ingestion outbox.
+ */
+export class AsyncNewLoadDetector {
+  public constructor(private readonly seenLoads: AsyncSeenLoadStore) {}
+
+  public async inspect(scan: OrderedLoadScan): Promise<NewLoadScanResult> {
+    if (!await this.seenLoads.isSearchInitialized(scan.searchId)) {
+      for (const load of scan.loads) await this.seenLoads.add(scan.searchId, getGlobalLoadKey(load));
+      await this.seenLoads.markSearchInitialized(scan.searchId);
+      return { newLoads: [], seeded: true, boundaryFound: false, overflowRisk: false };
+    }
+
+    const newLoads: NormalizedLoad[] = [];
+    const observedInWindow = new Set<string>();
+    let boundaryFound = false;
+    for (const load of scan.loads) {
+      const loadKey = getGlobalLoadKey(load);
+      if (await this.seenLoads.has(scan.searchId, loadKey)) {
+        boundaryFound = true;
+        break;
+      }
+      if (!observedInWindow.has(loadKey)) {
+        observedInWindow.add(loadKey);
+        newLoads.push(load);
+      }
+    }
+    return {
+      newLoads,
+      seeded: false,
+      boundaryFound,
+      overflowRisk: scan.isTruncated && !boundaryFound
+    };
+  }
+
+  public async acknowledge(scan: OrderedLoadScan, result: NewLoadScanResult): Promise<void> {
+    if (result.seeded) return;
+    for (const load of result.newLoads) await this.seenLoads.add(scan.searchId, getGlobalLoadKey(load));
+  }
+}

@@ -3,7 +3,33 @@ import { describe, it } from "node:test";
 
 import type { NormalizedLoad } from "@haulalert/load-model";
 
-import { InMemorySeenLoadStore, NewLoadDetector } from "./index.js";
+import {
+  AsyncNewLoadDetector,
+  InMemorySeenLoadStore,
+  NewLoadDetector,
+  type AsyncSeenLoadStore
+} from "./index.js";
+
+class InMemoryAsyncSeenLoadStore implements AsyncSeenLoadStore {
+  private readonly loadKeys = new Set<string>();
+  private readonly initializedSearches = new Set<string>();
+
+  public async has(_searchId: string, loadKey: string): Promise<boolean> {
+    return this.loadKeys.has(loadKey);
+  }
+
+  public async add(_searchId: string, loadKey: string): Promise<void> {
+    this.loadKeys.add(loadKey);
+  }
+
+  public async isSearchInitialized(searchId: string): Promise<boolean> {
+    return this.initializedSearches.has(searchId);
+  }
+
+  public async markSearchInitialized(searchId: string): Promise<void> {
+    this.initializedSearches.add(searchId);
+  }
+}
 
 function load(providerLoadId: string): NormalizedLoad {
   return {
@@ -100,5 +126,42 @@ describe("new load detector", () => {
 
     assert.equal(result.boundaryFound, false);
     assert.equal(result.overflowRisk, true);
+  });
+
+  it("acknowledges new rows only after durable ingestion succeeds", async () => {
+    const detector = new AsyncNewLoadDetector(new InMemoryAsyncSeenLoadStore());
+    const initial = { searchId: "central:source-hash", loads: [load("105")], isTruncated: false };
+    await detector.inspect(initial);
+
+    const next = {
+      searchId: "central:source-hash",
+      loads: [load("108"), load("105")],
+      isTruncated: false
+    };
+    const firstAttempt = await detector.inspect(next);
+    const replayBeforeAcknowledgement = await detector.inspect(next);
+
+    assert.deepEqual(firstAttempt.newLoads.map(({ providerLoadId }) => providerLoadId), ["108"]);
+    assert.deepEqual(replayBeforeAcknowledgement.newLoads.map(({ providerLoadId }) => providerLoadId), ["108"]);
+
+    await detector.acknowledge(next, firstAttempt);
+    const afterAcknowledgement = await detector.inspect(next);
+    assert.deepEqual(afterAcknowledgement.newLoads, []);
+    assert.equal(afterAcknowledgement.boundaryFound, true);
+  });
+
+  it("keeps the durable seen boundary global across overlapping searches", async () => {
+    const detector = new AsyncNewLoadDetector(new InMemoryAsyncSeenLoadStore());
+    await detector.inspect({ searchId: "central:wide", loads: [load("105")], isTruncated: false });
+    await detector.inspect({ searchId: "central:narrow", loads: [load("105")], isTruncated: false });
+
+    const wide = { searchId: "central:wide", loads: [load("108"), load("105")], isTruncated: false };
+    const narrow = { searchId: "central:narrow", loads: [load("108"), load("105")], isTruncated: false };
+    const wideResult = await detector.inspect(wide);
+    await detector.acknowledge(wide, wideResult);
+    const narrowResult = await detector.inspect(narrow);
+
+    assert.deepEqual(wideResult.newLoads.map(({ providerLoadId }) => providerLoadId), ["108"]);
+    assert.deepEqual(narrowResult.newLoads, []);
   });
 });
