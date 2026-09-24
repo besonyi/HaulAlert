@@ -7,6 +7,7 @@ import {
   type MiniAppDashboard
 } from "./api.js";
 import { locationsFromForm } from "./location-form.js";
+import { providerListLabel, providerMonitoringSummary } from "./provider-copy.js";
 
 interface TelegramWebApp {
   readonly initData: string;
@@ -91,12 +92,13 @@ function alertMarkup(alert: MiniAppAlert): string {
   const detail = [
     alert.filter.trailerTypes.join(" / "),
     alert.filter.minimumPayUsd === null ? "Any pay" : `$${alert.filter.minimumPayUsd.toLocaleString()}+`,
-    alert.filter.providers.length === 3 ? "All boards" : alert.filter.providers.join(", ")
+    alert.filter.providers.length === 3 ? "All boards" : providerListLabel(alert.filter.providers)
   ].join(" · ");
   const pauseLabel = alert.status === "active" ? "Pause" : "Resume";
   return `<article class="alert-card ${alert.status === "paused" ? "paused" : ""}">
     <div class="card-heading"><div><h2>${escapeHtml(alert.name)}</h2><p>${escapeHtml(route)}</p></div><span class="status ${alert.status}">${alert.status === "active" ? "Active" : "Paused"}</span></div>
     <p class="details">${escapeHtml(detail)}</p>
+    <p class="monitoring-copy">${escapeHtml(alert.status === "active" ? providerMonitoringSummary(alert.filter.providers) : `Monitoring is paused for ${providerListLabel(alert.filter.providers)}.`)}</p>
     <div class="card-actions"><button data-action="toggle" data-id="${alert.id}" data-status="${alert.status}">${pauseLabel}</button><button data-action="edit" data-id="${alert.id}">Edit</button><button data-action="duplicate" data-id="${alert.id}">Copy</button><button class="danger" data-action="delete" data-id="${alert.id}">Delete</button></div>
   </article>`;
 }
@@ -111,7 +113,7 @@ function createMarkup(): string {
     ${locationList("destination", "Destination", filter?.destinations)}
     <div class="form-grid"><label>Trailer<select name="trailer"><option value="open"${selected(filter?.trailerTypes.includes("open") ?? true)}>Open</option><option value="enclosed"${selected(filter?.trailerTypes.includes("enclosed") ?? false)}>Enclosed</option></select></label><label>Minimum pay<input name="minimumPay" type="number" min="0" step="50" placeholder="Any" value="${formValue(filter?.minimumPayUsd)}" /></label></div>
     <div class="form-grid"><label>Min vehicles<input name="minimumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.minimum)}" /></label><label>Max vehicles<input name="maximumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.maximum)}" /></label></div>
-    <fieldset><legend>Load boards</legend><label class="check"><input type="checkbox" name="provider" value="central-dispatch"${checked(filter, "central-dispatch")} />Central Dispatch</label><label class="check"><input type="checkbox" name="provider" value="super-dispatch"${checked(filter, "super-dispatch")} />Super Dispatch</label><label class="check"><input type="checkbox" name="provider" value="shipcars"${checked(filter, "shipcars")} />Ship.Cars</label></fieldset>
+    <fieldset><legend>Load boards</legend><p class="provider-help">Choose where HaulAlert should look. Your alert is matched only against the boards selected here.</p><label class="check"><input type="checkbox" name="provider" value="central-dispatch"${checked(filter, "central-dispatch")} />Central Dispatch</label><label class="check"><input type="checkbox" name="provider" value="super-dispatch"${checked(filter, "super-dispatch")} />Super Dispatch</label><label class="check"><input type="checkbox" name="provider" value="shipcars"${checked(filter, "shipcars")} />Ship.Cars</label><p class="provider-summary" data-provider-summary role="status">${escapeHtml(providerMonitoringSummary(filter?.providers ?? defaultProviders))}</p></fieldset>
     <button class="primary submit" type="submit">${editing ? "Save changes" : "Start monitoring"}</button>
     ${editing ? `<button class="secondary cancel" type="button" data-screen="dashboard">Cancel</button>` : ""}
   </form>`;
@@ -162,9 +164,22 @@ function bindInteractions(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-remove-location]").forEach((button) => {
     button.addEventListener("click", () => button.closest("[data-location-group]")?.remove());
   });
+  app.querySelectorAll<HTMLInputElement>('input[name="provider"]').forEach((input) => {
+    input.addEventListener("change", updateProviderSummary);
+  });
+  updateProviderSummary();
   app.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((button) => {
     button.addEventListener("click", () => { void manageAlert(button); });
   });
+}
+
+function updateProviderSummary(): void {
+  const summary = app.querySelector<HTMLElement>("[data-provider-summary]");
+  if (summary === null) return;
+  const providers = Array.from(app.querySelectorAll<HTMLInputElement>('input[name="provider"]:checked'))
+    .map((input) => input.value)
+    .filter((value): value is CanonicalFilter["providers"][number] => value === "central-dispatch" || value === "super-dispatch" || value === "shipcars");
+  summary.textContent = providerMonitoringSummary(providers);
 }
 
 function addLocation(role: string | undefined): void {
@@ -260,6 +275,8 @@ function selected(value: boolean): string {
 function checked(filter: CanonicalFilter | undefined, provider: CanonicalFilter["providers"][number]): string {
   return filter === undefined || filter.providers.includes(provider) ? " checked" : "";
 }
+
+const defaultProviders: CanonicalFilter["providers"] = ["central-dispatch", "super-dispatch", "shipcars"];
 
 function formValue(value: string | number | null | undefined): string {
   return value === null || value === undefined ? "" : escapeHtml(String(value));
