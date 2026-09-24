@@ -41,6 +41,10 @@ export {
   CentralDispatchSessionMonitor,
   type CentralDispatchSessionProbeResult
 } from "./central-dispatch-session-monitor.js";
+export {
+  CentralDispatchRuntimeCycle,
+  type CentralDispatchRuntimeCycleResult
+} from "./central-dispatch-runtime-cycle.js";
 
 export interface ProviderSearchConfiguration {
   readonly sessionId: string;
