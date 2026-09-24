@@ -28,8 +28,8 @@ describe("PostgreSQL provider search source", () => {
       sourceFilterHash: "source-hash",
       sourceFilter: { trailerTypes: ["open"] }
     }]);
-    assert.match(statements[0] ?? "", /provider = 'central-dispatch'/);
-    assert.match(statements[0] ?? "", /status = 'active'/);
+    assert.match(statements[0] ?? "", /searches\.provider = 'central-dispatch'/);
+    assert.match(statements[0] ?? "", /alerts\.status = 'active'/);
   });
 
   it("rejects malformed durable source filters", async () => {

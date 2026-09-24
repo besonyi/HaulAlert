@@ -2,6 +2,11 @@ import {
   parseCanonicalFilter,
   type CanonicalFilter
 } from "@haulalert/canonical-filter";
+import {
+  compileFilterForProvider,
+  type ProviderFilterCapabilities,
+  type SourceFilter
+} from "@haulalert/filter-compiler";
 import { normalizedLoadSchema, type NormalizedLoad } from "@haulalert/load-model";
 import type { SqlExecutor } from "@haulalert/notification-service";
 
@@ -56,6 +61,33 @@ export interface DashboardRepository {
   getForUser(userId: string, recentLimit?: number): Promise<CustomerDashboard>;
 }
 
+interface ProviderSearchPlan {
+  readonly provider: CanonicalFilter["providers"][number];
+  readonly sourceFilterHash: string;
+  readonly sourceFilter: SourceFilter;
+}
+
+const providerCapabilities: Readonly<Record<ProviderSearchPlan["provider"], ProviderFilterCapabilities>> = {
+  "central-dispatch": {
+    provider: "central-dispatch",
+    sourceFilterFields: ["origins", "destinations", "trailerTypes", "readiness", "minimumPayUsd", "minimumRatePerMile"],
+    vehicleCountSupport: "range",
+    newLoadDetectionStrategy: "tagged-top"
+  },
+  "super-dispatch": {
+    provider: "super-dispatch",
+    sourceFilterFields: ["origins", "destinations"],
+    vehicleCountSupport: "minimum-only",
+    newLoadDetectionStrategy: "newest-first"
+  },
+  shipcars: {
+    provider: "shipcars",
+    sourceFilterFields: ["origins", "destinations", "trailerTypes", "readiness", "minimumPayUsd", "minimumRatePerMile"],
+    vehicleCountSupport: "range",
+    newLoadDetectionStrategy: "newest-first"
+  }
+};
+
 /** Customer-visible alert and delivery summary, always scoped to one user. */
 export class PostgresDashboardRepository implements DashboardRepository {
   public constructor(private readonly database: SqlExecutor) {}
@@ -97,11 +129,28 @@ export class PostgresAlertRepository implements AlertManagementRepository {
 
   public async create(input: CreateAlertInput): Promise<ManagedAlert> {
     const filter = parseCanonicalFilter(input.filter);
+    const searches = compileProviderSearches(filter);
     const result = await this.database.query(
-      `INSERT INTO alerts (user_id, name, canonical_filter)
-      VALUES ($1::uuid, $2, $3::jsonb)
-      RETURNING id, user_id, name, status, canonical_filter, created_at, updated_at`,
-      [input.userId, filter.name, JSON.stringify(filter)]
+      `WITH created_alert AS (
+        INSERT INTO alerts (user_id, name, canonical_filter)
+        VALUES ($1::uuid, $2, $3::jsonb)
+        RETURNING id, user_id, name, status, canonical_filter, created_at, updated_at
+      ), source_searches AS (
+        INSERT INTO provider_searches (provider, source_filter_hash, source_filter)
+        SELECT input.provider, input.source_filter_hash, input.source_filter
+        FROM created_alert
+        CROSS JOIN jsonb_to_recordset($4::jsonb) AS input(provider text, source_filter_hash text, source_filter jsonb)
+        ON CONFLICT (provider, source_filter_hash) DO UPDATE
+          SET source_filter = EXCLUDED.source_filter, status = 'active', updated_at = now()
+        RETURNING id
+      ), linked_searches AS (
+        INSERT INTO alert_provider_searches (alert_id, provider_search_id)
+        SELECT created_alert.id, source_searches.id
+        FROM created_alert CROSS JOIN source_searches
+        ON CONFLICT DO NOTHING
+      )
+      SELECT id, user_id, name, status, canonical_filter, created_at, updated_at FROM created_alert`,
+      [input.userId, filter.name, JSON.stringify(filter), JSON.stringify(searches)]
     );
     return parseManagedAlert(result.rows[0]);
   }
@@ -119,12 +168,34 @@ export class PostgresAlertRepository implements AlertManagementRepository {
 
   public async update(input: UpdateAlertInput): Promise<ManagedAlert | undefined> {
     const filter = parseCanonicalFilter(input.filter);
+    const searches = compileProviderSearches(filter);
     const result = await this.database.query(
-      `UPDATE alerts
-      SET name = $3, canonical_filter = $4::jsonb, updated_at = now()
-      WHERE id = $1::uuid AND user_id = $2::uuid AND status IN ('active', 'paused')
-      RETURNING id, user_id, name, status, canonical_filter, created_at, updated_at`,
-      [input.alertId, input.userId, filter.name, JSON.stringify(filter)]
+      `WITH updated_alert AS (
+        UPDATE alerts
+        SET name = $3, canonical_filter = $4::jsonb, updated_at = now()
+        WHERE id = $1::uuid AND user_id = $2::uuid AND status IN ('active', 'paused')
+        RETURNING id, user_id, name, status, canonical_filter, created_at, updated_at
+      ), source_searches AS (
+        INSERT INTO provider_searches (provider, source_filter_hash, source_filter)
+        SELECT input.provider, input.source_filter_hash, input.source_filter
+        FROM updated_alert
+        CROSS JOIN jsonb_to_recordset($5::jsonb) AS input(provider text, source_filter_hash text, source_filter jsonb)
+        ON CONFLICT (provider, source_filter_hash) DO UPDATE
+          SET source_filter = EXCLUDED.source_filter, status = 'active', updated_at = now()
+        RETURNING id
+      ), linked_searches AS (
+        INSERT INTO alert_provider_searches (alert_id, provider_search_id)
+        SELECT updated_alert.id, source_searches.id
+        FROM updated_alert CROSS JOIN source_searches
+        ON CONFLICT DO NOTHING
+      ), detached_searches AS (
+        DELETE FROM alert_provider_searches AS links
+        USING updated_alert
+        WHERE links.alert_id = updated_alert.id
+          AND NOT EXISTS (SELECT 1 FROM source_searches WHERE source_searches.id = links.provider_search_id)
+      )
+      SELECT id, user_id, name, status, canonical_filter, created_at, updated_at FROM updated_alert`,
+      [input.alertId, input.userId, filter.name, JSON.stringify(filter), JSON.stringify(searches)]
     );
     return result.rows[0] === undefined ? undefined : parseManagedAlert(result.rows[0]);
   }
@@ -154,11 +225,20 @@ export class PostgresAlertRepository implements AlertManagementRepository {
       throw new Error("Alert name must contain between 1 and 80 characters");
     }
     const result = await this.database.query(
-      `INSERT INTO alerts (user_id, name, canonical_filter)
-      SELECT user_id, $3, jsonb_set(canonical_filter, '{name}', to_jsonb($3::text))
-      FROM alerts
-      WHERE id = $1::uuid AND user_id = $2::uuid AND status IN ('active', 'paused')
-      RETURNING id, user_id, name, status, canonical_filter, created_at, updated_at`,
+      `WITH duplicated_alert AS (
+        INSERT INTO alerts (user_id, name, canonical_filter)
+        SELECT user_id, $3, jsonb_set(canonical_filter, '{name}', to_jsonb($3::text))
+        FROM alerts
+        WHERE id = $1::uuid AND user_id = $2::uuid AND status IN ('active', 'paused')
+        RETURNING id, user_id, name, status, canonical_filter, created_at, updated_at
+      ), linked_searches AS (
+        INSERT INTO alert_provider_searches (alert_id, provider_search_id)
+        SELECT duplicated_alert.id, links.provider_search_id
+        FROM duplicated_alert
+        INNER JOIN alert_provider_searches AS links ON links.alert_id = $1::uuid
+        ON CONFLICT DO NOTHING
+      )
+      SELECT id, user_id, name, status, canonical_filter, created_at, updated_at FROM duplicated_alert`,
       [alertId, userId, normalizedName]
     );
     return result.rows[0] === undefined ? undefined : parseManagedAlert(result.rows[0]);
@@ -167,14 +247,32 @@ export class PostgresAlertRepository implements AlertManagementRepository {
   /** Preserves historical deliveries while removing the alert from all customer views. */
   public async remove(alertId: string, userId: string): Promise<boolean> {
     const result = await this.database.query(
-      `UPDATE alerts
-      SET status = 'deleted', deleted_at = now(), updated_at = now()
-      WHERE id = $1::uuid AND user_id = $2::uuid AND status IN ('active', 'paused')
-      RETURNING id`,
+      `WITH removed_alert AS (
+        UPDATE alerts
+        SET status = 'deleted', deleted_at = now(), updated_at = now()
+        WHERE id = $1::uuid AND user_id = $2::uuid AND status IN ('active', 'paused')
+        RETURNING id
+      ), removed_links AS (
+        DELETE FROM alert_provider_searches AS links
+        USING removed_alert
+        WHERE links.alert_id = removed_alert.id
+      )
+      SELECT id FROM removed_alert`,
       [alertId, userId]
     );
     return result.rows.length === 1;
   }
+}
+
+function compileProviderSearches(filter: CanonicalFilter): readonly ProviderSearchPlan[] {
+  return filter.providers.map((provider) => {
+    const compiled = compileFilterForProvider(filter, providerCapabilities[provider]);
+    return {
+      provider: compiled.provider,
+      sourceFilterHash: compiled.sourceFilterHash,
+      sourceFilter: compiled.sourceFilter
+    };
+  });
 }
 
 function parseManagedAlert(row: Record<string, unknown> | undefined): ManagedAlert {

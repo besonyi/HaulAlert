@@ -47,7 +47,27 @@ describe("Postgres alert repository", () => {
     assert.equal(alert.id, alertRow.id);
     assert.equal(alert.filter.name, filter.name);
     assert.match(calls[0]?.statement ?? "", /INSERT INTO alerts/);
-    assert.deepEqual(calls[0]?.parameters, [alertRow.user_id, filter.name, JSON.stringify(filter)]);
+    assert.match(calls[0]?.statement ?? "", /INSERT INTO provider_searches/);
+    assert.match(calls[0]?.statement ?? "", /INSERT INTO alert_provider_searches/);
+    assert.deepEqual(calls[0]?.parameters?.slice(0, 3), [alertRow.user_id, filter.name, JSON.stringify(filter)]);
+    const searches = JSON.parse(String(calls[0]?.parameters?.[3])) as unknown[];
+    assert.equal(searches.length, 1);
+    assert.deepEqual(searches[0] && {
+      provider: (searches[0] as Record<string, unknown>).provider,
+      sourceFilter: (searches[0] as Record<string, unknown>).sourceFilter
+    }, {
+      provider: "central-dispatch",
+      sourceFilter: {
+        origins: filter.origins,
+        destinations: filter.destinations,
+        trailerTypes: filter.trailerTypes,
+        vehicles: filter.vehicles,
+        readiness: filter.readiness,
+        minimumPayUsd: null,
+        minimumRatePerMile: null
+      }
+    });
+    assert.match(String((searches[0] as Record<string, unknown>).sourceFilterHash), /^[a-f0-9]{64}$/);
   });
 
   it("limits reads and mutations to the owning user while excluding deleted alerts", async () => {
@@ -88,7 +108,30 @@ describe("Postgres alert repository", () => {
 
     assert.equal(duplicate?.name, "Evening route");
     assert.match(captured?.statement ?? "", /jsonb_set/);
+    assert.match(captured?.statement ?? "", /alert_provider_searches/);
     assert.match(captured?.statement ?? "", /status IN \('active', 'paused'\)/);
     assert.deepEqual(captured?.parameters, [alertRow.id, alertRow.user_id, "Evening route"]);
+  });
+
+  it("replaces provider-search links when a customer changes an alert filter", async () => {
+    let captured: { statement: string; parameters: readonly unknown[] } | undefined;
+    const database: SqlExecutor = {
+      query: async (statement, parameters) => {
+        captured = { statement, parameters };
+        return { rows: [{ ...alertRow, canonical_filter: { ...filter, providers: ["shipcars"] } }] };
+      }
+    };
+    const repository = new PostgresAlertRepository(database);
+
+    await repository.update({
+      alertId: alertRow.id,
+      userId: alertRow.user_id,
+      filter: { ...filter, providers: ["shipcars"] }
+    });
+
+    assert.match(captured?.statement ?? "", /INSERT INTO provider_searches/);
+    assert.match(captured?.statement ?? "", /DELETE FROM alert_provider_searches/);
+    const searches = JSON.parse(String(captured?.parameters[4])) as Array<Record<string, unknown>>;
+    assert.deepEqual(searches.map((search) => search.provider), ["shipcars"]);
   });
 });

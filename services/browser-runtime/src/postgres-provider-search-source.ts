@@ -11,10 +11,16 @@ export class PostgresProviderSearchSource {
 
   public async listActiveCentralDispatchSearches(): Promise<readonly ActiveProviderSearch[]> {
     const result = await this.database.query(
-      `SELECT id, provider, source_filter_hash, source_filter
-       FROM provider_searches
-       WHERE provider = 'central-dispatch' AND status = 'active'
-       ORDER BY id ASC`,
+      `SELECT searches.id, searches.provider, searches.source_filter_hash, searches.source_filter
+       FROM provider_searches AS searches
+       WHERE searches.provider = 'central-dispatch' AND searches.status = 'active'
+         AND EXISTS (
+           SELECT 1
+           FROM alert_provider_searches AS links
+           INNER JOIN alerts AS alerts ON alerts.id = links.alert_id
+           WHERE links.provider_search_id = searches.id AND alerts.status = 'active'
+         )
+       ORDER BY searches.id ASC`,
       []
     );
     return result.rows.map(toSearch);

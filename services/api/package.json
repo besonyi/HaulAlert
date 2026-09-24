@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@haulalert/canonical-filter": "workspace:*",
+    "@haulalert/filter-compiler": "workspace:*",
     "@haulalert/load-model": "workspace:*",
     "@haulalert/notification-service": "workspace:*",
     "pg": "^8.23.0"
