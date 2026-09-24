@@ -16,7 +16,8 @@
     "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "node --test dist/*.test.js",
-    "start:central-dispatch": "node dist/central-dispatch-worker-main.js"
+    "start:central-dispatch": "node dist/central-dispatch-worker-main.js",
+    "check:central-dispatch": "node dist/central-dispatch-readiness-main.js"
   },
   "dependencies": {
     "@haulalert/adapter-central-dispatch": "workspace:*",

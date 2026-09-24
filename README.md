@@ -34,6 +34,30 @@ Once PostgreSQL has been migrated and `.env` contains both `DATABASE_URL` and `T
 pnpm --filter @haulalert/notification-service start
 ```
 
+### Central Dispatch browser worker
+
+The Central Dispatch worker reads active provider searches from PostgreSQL and
+uses an already-authenticated page in local Chrome. It never saves provider
+credentials, cookies, or page content outside the normal load-ingestion path.
+
+1. Apply the database migrations, including `0004_browser_runtime_metadata.sql`.
+2. Relaunch the Chrome profile you use for Central Dispatch with remote debugging
+   bound to loopback on port `9222`, then sign in to Central Dispatch manually and
+   keep an `app.centraldispatch.com` page open. Do not expose this debugging port
+   to a network.
+3. Configure the `CENTRAL_DISPATCH_*` values in `.env` if you need values other
+   than the safe defaults shown in `.env.example`.
+4. Build, then verify the local browser session before starting the worker:
+
+```bash
+pnpm --filter @haulalert/browser-runtime-service build
+pnpm --filter @haulalert/browser-runtime-service check:central-dispatch
+pnpm --filter @haulalert/browser-runtime-service start:central-dispatch
+```
+
+If Chrome is closed or the page is unavailable, the running worker marks the
+session offline and skips provider calls until a later healthy check succeeds.
+
 To receive Telegram updates, set the same `TELEGRAM_WEBHOOK_SECRET` in Telegram's `setWebhook` request, expose `TELEGRAM_WEBHOOK_PATH` publicly, then run the Bot server:
 
 ```bash
