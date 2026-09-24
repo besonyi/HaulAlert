@@ -26,6 +26,8 @@ export interface PersistentSearchTab {
 export interface SearchTabReservation {
   readonly tab: PersistentSearchTab;
   readonly reused: boolean;
+  /** True when a degraded durable tab is being configured again after a failure. */
+  readonly recovered: boolean;
 }
 
 /** Serializable runtime metadata; browser credentials are intentionally absent. */
@@ -137,7 +139,7 @@ export class BrowserRuntime {
     });
 
     if (reusableTab !== undefined) {
-      return { tab: reusableTab, reused: true };
+      return { tab: reusableTab, reused: true, recovered: false };
     }
 
     // A scan failure can temporarily degrade a tab while its browser session is
@@ -152,7 +154,11 @@ export class BrowserRuntime {
     });
 
     if (recoverableTab !== undefined) {
-      return { tab: this.updateTab(recoverableTab.id, { status: "provisioning" }), reused: false };
+      return {
+        tab: this.updateTab(recoverableTab.id, { status: "provisioning" }),
+        reused: false,
+        recovered: true
+      };
     }
 
     const session = this.pickHealthySession(input.provider);
@@ -168,7 +174,7 @@ export class BrowserRuntime {
     };
 
     this.tabs.set(tab.id, tab);
-    return { tab, reused: false };
+    return { tab, reused: false, recovered: false };
   }
 
   public markTabReady(id: string): PersistentSearchTab {

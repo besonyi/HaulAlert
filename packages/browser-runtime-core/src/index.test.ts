@@ -39,6 +39,7 @@ describe("browser runtime", () => {
     const recovery = runtime.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "hash-a" });
 
     assert.equal(recovery.reused, false);
+    assert.equal(recovery.recovered, true);
     assert.equal(recovery.tab.id, first.tab.id);
     assert.equal(recovery.tab.providerSearchId, first.tab.providerSearchId);
     assert.equal(recovery.tab.status, "provisioning");

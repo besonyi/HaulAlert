@@ -70,6 +70,35 @@ describe("browser runtime orchestrator", () => {
     assert.equal(runtime.listTabs()[0]?.status, "closed");
   });
 
+  it("keeps a degraded durable tab available when recovery configuration fails", async () => {
+    const runtime = createRuntime();
+    const initial = runtime.reserveSearchTab({
+      provider: "central-dispatch",
+      sourceFilterHash: "source-hash",
+      providerSearchId: "11111111-1111-4111-8111-111111111111"
+    });
+    runtime.markTabReady(initial.tab.id);
+    runtime.markTabDegraded(initial.tab.id);
+    const orchestrator = new BrowserRuntimeOrchestrator(runtime, {
+      configureSearch: async () => { throw new Error("Central Dispatch navigation failed"); }
+    });
+
+    await assert.rejects(
+      () => orchestrator.activateProviderSearch({
+        provider: "central-dispatch",
+        sourceFilterHash: "source-hash",
+        sourceFilter: { trailerTypes: ["open"] }
+      }, "11111111-1111-4111-8111-111111111111"),
+      /Central Dispatch navigation failed/
+    );
+
+    assert.deepEqual(runtime.listTabs().map(({ id, providerSearchId, status }) => ({ id, providerSearchId, status })), [{
+      id: initial.tab.id,
+      providerSearchId: "11111111-1111-4111-8111-111111111111",
+      status: "degraded"
+    }]);
+  });
+
   it("activates a persisted provider search without rebuilding its alert filter", async () => {
     const calls: unknown[] = [];
     const runtime = createRuntime();

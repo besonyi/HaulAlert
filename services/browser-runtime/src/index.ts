@@ -155,7 +155,14 @@ export class BrowserRuntimeOrchestrator {
         reused: false
       };
     } catch (error) {
-      this.runtime.closeTab(reservation.tab.id);
+      // Keep the durable search identity available for a later recovery when
+      // this was a reconfiguration of an already-degraded tab. A brand-new
+      // tab still closes on failure because it has no prior working state.
+      if (reservation.recovered) {
+        this.runtime.markTabDegraded(reservation.tab.id);
+      } else {
+        this.runtime.closeTab(reservation.tab.id);
+      }
       throw error;
     }
   }
