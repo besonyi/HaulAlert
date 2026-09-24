@@ -11,6 +11,8 @@ import type { CompiledProviderFilter, SourceFilter } from "@haulalert/filter-com
 import type { NormalizedLoad } from "@haulalert/load-model";
 import type { NewLoadScanResult, OrderedLoadScan } from "@haulalert/new-load-detector";
 
+export { PostgresBrowserRuntimeStateStore, type RuntimeSqlExecutor } from "./postgres-runtime-state-store.js";
+
 export interface ProviderSearchConfiguration {
   readonly sessionId: string;
   readonly tabId: string;
