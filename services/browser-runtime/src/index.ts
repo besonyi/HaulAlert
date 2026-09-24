@@ -12,6 +12,7 @@ import type { NormalizedLoad } from "@haulalert/load-model";
 import type { NewLoadScanResult, OrderedLoadScan } from "@haulalert/new-load-detector";
 
 export { PostgresBrowserRuntimeStateStore, type RuntimeSqlExecutor } from "./postgres-runtime-state-store.js";
+export { DurableBrowserRuntimeController, type BrowserRuntimeSnapshotStore } from "./durable-runtime-controller.js";
 
 export interface ProviderSearchConfiguration {
   readonly sessionId: string;
