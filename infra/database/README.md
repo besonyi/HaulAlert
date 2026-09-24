@@ -8,6 +8,7 @@ Set `DATABASE_URL` in a local `.env` file, then apply migrations in lexical orde
 psql "$DATABASE_URL" -f infra/database/migrations/0001_initial.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0002_notification_delivery_claim_lease.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0003_durable_search_detection_state.sql
+psql "$DATABASE_URL" -f infra/database/migrations/0004_browser_runtime_metadata.sql
 ```
 
 The application must use three transactional patterns:
