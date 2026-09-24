@@ -13,6 +13,7 @@ export interface MiniAppApiDependencies {
   readonly alerts: AlertManagementRepository;
   readonly dashboard: DashboardRepository;
   readonly adminDashboard?: { getOverview(): Promise<unknown> };
+  readonly adminSearch?: { search(query: string): Promise<unknown> };
   readonly isAdmin?: (telegramUserId: string) => boolean;
   readonly authenticate: (initData: string) => AuthenticatedTelegramUser;
 }
@@ -32,7 +33,8 @@ interface ApiResult {
 }
 
 async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiDependencies): Promise<ApiResult> {
-  const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+  const url = new URL(request.url ?? "/", "http://localhost");
+  const pathname = url.pathname;
   if (!pathname.startsWith("/v1/")) return { statusCode: 404, body: { error: "not_found" } };
 
   let user: AuthenticatedTelegramUser;
@@ -48,6 +50,13 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       return dependencies.isAdmin(user.id)
         ? { statusCode: 200, body: { overview: await dependencies.adminDashboard.getOverview() } }
         : { statusCode: 403, body: { error: "forbidden" } };
+    }
+    if (pathname === "/v1/admin/search" && request.method === "GET") {
+      if (dependencies.adminSearch === undefined || dependencies.isAdmin === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      if (!dependencies.isAdmin(user.id)) return { statusCode: 403, body: { error: "forbidden" } };
+      const query = url.searchParams.get("q")?.trim() ?? "";
+      if (query.length < 2 || query.length > 80) return { statusCode: 400, body: { error: "invalid_search_query" } };
+      return { statusCode: 200, body: { results: await dependencies.adminSearch.search(query) } };
     }
     if (pathname === "/v1/dashboard" && request.method === "GET") {
       return { statusCode: 200, body: { dashboard: await dependencies.dashboard.getForUser(user.id) } };

@@ -24,3 +24,13 @@ test("admin client reports a rejected operator session", async () => {
     return true;
   });
 });
+
+test("admin client encodes a bounded operations search", async () => {
+  let path = "";
+  const client = new AdminApiClient("signed-init-data", "/api", async (input) => {
+    path = String(input);
+    return new Response(JSON.stringify({ results: { users: [], alerts: [], loads: [], deliveries: [] } }));
+  });
+  await client.search("CA AZ");
+  assert.equal(path, "/api/v1/admin/search?q=CA%20AZ");
+});

@@ -133,7 +133,7 @@ LoadBoard search
 
 - [x] **P8.1** Build the admin dashboard for system health, active sessions, tabs, loads, alerts, and delivery outcomes.
 - [x] **P8.2** Provide operator views for session and tab errors with actionable recovery controls.
-- [ ] **P8.3** Add searchable administration for users, filters, normalized loads, and alert history.
+- [x] **P8.3** Add searchable administration for users, filters, normalized loads, and alert history.
 - [ ] **P8.4** Build broker profiles, broker search, and customer-managed blocked-broker lists.
 - [ ] **P8.5** Implement plan entitlement checks and subscription lifecycle management.
 - [ ] **P8.6** Implement the referral model, attribution rules, balances, and payout-review workflow.

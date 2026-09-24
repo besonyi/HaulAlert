@@ -11,6 +11,7 @@ import { normalizedLoadSchema, type NormalizedLoad } from "@haulalert/load-model
 import type { SqlExecutor } from "@haulalert/notification-service";
 
 export { PostgresAdminDashboardRepository, type AdminSystemOverview, type OperationalCount } from "./admin-dashboard.js";
+export { PostgresAdminSearchRepository, normalizeAdminSearchQuery, type AdminSearchResults } from "./admin-search.js";
 export { getAdminTelegramUserIds, isAdminTelegramUser } from "./admin-access.js";
 
 export type ManagedAlertStatus = "active" | "paused";

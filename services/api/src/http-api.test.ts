@@ -111,7 +111,8 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
   const server = createMiniAppApiServer({
     alerts: {} as AlertManagementRepository,
     dashboard: { getForUser: async () => ({ activeAlertCount: 0, loadsFoundLast24Hours: 0, recentNotifications: [] }) },
-    adminDashboard: { getOverview: async () => ({ users: 3, activeAlerts: 2, loads: 5, sessions: [], tabs: [], deliveries: [] }) },
+    adminDashboard: { getOverview: async () => ({ users: 3, activeAlerts: 2, loads: 5, sessions: [], tabs: [], deliveries: [], recovery: [] }) },
+    adminSearch: { search: async (query) => ({ users: [{ telegramUserId: query }], alerts: [], loads: [], deliveries: [] }) },
     isAdmin: (telegramUserId) => telegramUserId === "admin-telegram-id",
     authenticate: (initData) => ({ id: initData, firstName: "Alex" })
   });
@@ -125,6 +126,11 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
     const response = await fetch(`${baseUrl}/v1/admin/overview`, { headers: { authorization: "tma admin-telegram-id" } });
     assert.equal(response.status, 200);
     assert.equal((await response.json() as { overview: { users: number } }).overview.users, 3);
+    assert.equal((await fetch(`${baseUrl}/v1/admin/search?q=al`, { headers: { authorization: "tma customer" } })).status, 403);
+    const search = await fetch(`${baseUrl}/v1/admin/search?q=123`, { headers: { authorization: "tma admin-telegram-id" } });
+    assert.equal(search.status, 200);
+    assert.equal((await search.json() as { results: { users: { telegramUserId: string }[] } }).results.users[0]?.telegramUserId, "123");
+    assert.equal((await fetch(`${baseUrl}/v1/admin/search?q=x`, { headers: { authorization: "tma admin-telegram-id" } })).status, 400);
   } finally {
     await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
   }

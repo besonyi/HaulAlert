@@ -21,6 +21,13 @@ export interface AdminSystemOverview {
   readonly recovery: readonly OperationalRecoveryItem[];
 }
 
+export interface AdminSearchResults {
+  readonly users: readonly { readonly id: string; readonly telegramUserId: string; readonly createdAt: string }[];
+  readonly alerts: readonly { readonly id: string; readonly name: string; readonly status: string; readonly telegramUserId: string; readonly updatedAt: string }[];
+  readonly loads: readonly { readonly provider: string; readonly providerLoadId: string; readonly pickup: string; readonly delivery: string; readonly firstSeenAt: string }[];
+  readonly deliveries: readonly { readonly id: string; readonly status: string; readonly alertName: string; readonly telegramUserId: string; readonly loadKey: string; readonly createdAt: string }[];
+}
+
 export class AdminApiError extends Error {
   public constructor(readonly statusCode: number, readonly code: string) {
     super(code);
@@ -40,6 +47,14 @@ export class AdminApiClient {
     });
     if (!response.ok) throw await errorFrom(response);
     return (await response.json() as { overview: AdminSystemOverview }).overview;
+  }
+
+  public async search(query: string): Promise<AdminSearchResults> {
+    const response = await this.request(`${this.baseUrl}/v1/admin/search?q=${encodeURIComponent(query)}`, {
+      headers: { authorization: `tma ${this.initData}` }
+    });
+    if (!response.ok) throw await errorFrom(response);
+    return (await response.json() as { results: AdminSearchResults }).results;
   }
 }
 
