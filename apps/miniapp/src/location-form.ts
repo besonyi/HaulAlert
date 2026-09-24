@@ -1,12 +1,19 @@
 import type { LocationConstraint } from "@haulalert/canonical-filter";
 
-export type LocationFormPrefix = "origin" | "destination";
+export type LocationFormPrefix = string;
+export type LocationRole = "origin" | "destination";
 
-type FormValues = Pick<FormData, "get">;
+type FormValues = Pick<FormData, "get" | "getAll">;
+
+/** Collects the location groups still visible in a Mini App alert form. */
+export function locationsFromForm(data: FormValues, role: LocationRole): LocationConstraint[] {
+  const prefixes = data.getAll(`${role}LocationPrefix`).filter((value): value is string => typeof value === "string" && value.length > 0);
+  if (prefixes.length === 0) throw new Error(`Add at least one ${role}.`);
+  return prefixes.map((prefix) => locationFromForm(data, prefix, role === "origin" ? "Origin" : "Destination"));
+}
 
 /** Converts one Mini App location section into the canonical, provider-safe location model. */
-export function locationFromForm(data: FormValues, prefix: LocationFormPrefix): LocationConstraint {
-  const label = prefix === "origin" ? "Origin" : "Destination";
+export function locationFromForm(data: FormValues, prefix: LocationFormPrefix, label = "Location"): LocationConstraint {
   const kind = read(data, `${prefix}Kind`);
   if (kind === "anywhere") return { kind: "anywhere" };
 

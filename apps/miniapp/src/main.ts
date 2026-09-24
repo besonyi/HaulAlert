@@ -6,7 +6,7 @@ import {
   type MiniAppAlert,
   type MiniAppDashboard
 } from "./api.js";
-import { locationFromForm } from "./location-form.js";
+import { locationsFromForm } from "./location-form.js";
 
 interface TelegramWebApp {
   readonly initData: string;
@@ -104,8 +104,8 @@ function createMarkup(): string {
   return `<form class="content form" id="alert-form">
     <p class="form-intro">Tell us which loads to watch. You can refine locations and preferences later.</p>
     <label>Alert name<input name="name" maxlength="80" placeholder="e.g. CA → AZ open loads" required /></label>
-    ${locationFields("origin", "Origin")}
-    ${locationFields("destination", "Destination")}
+    ${locationList("origin", "Origin")}
+    ${locationList("destination", "Destination")}
     <div class="form-grid"><label>Trailer<select name="trailer"><option value="open">Open</option><option value="enclosed">Enclosed</option></select></label><label>Minimum pay<input name="minimumPay" type="number" min="0" step="50" placeholder="Any" /></label></div>
     <div class="form-grid"><label>Min vehicles<input name="minimumVehicles" type="number" min="1" step="1" placeholder="Any" /></label><label>Max vehicles<input name="maximumVehicles" type="number" min="1" step="1" placeholder="Any" /></label></div>
     <fieldset><legend>Load boards</legend><label class="check"><input type="checkbox" name="provider" value="central-dispatch" checked />Central Dispatch</label><label class="check"><input type="checkbox" name="provider" value="super-dispatch" checked />Super Dispatch</label><label class="check"><input type="checkbox" name="provider" value="shipcars" checked />Ship.Cars</label></fieldset>
@@ -113,9 +113,18 @@ function createMarkup(): string {
   </form>`;
 }
 
-function locationFields(prefix: "origin" | "destination", label: string): string {
+function locationList(role: "origin" | "destination", label: string): string {
+  return `<div class="location-list" data-location-list="${role}">
+    ${locationFields(`${role}1`, label, role)}
+    <button class="secondary" type="button" data-add-location="${role}">＋ Add another ${role}</button>
+  </div>`;
+}
+
+function locationFields(prefix: string, label: string, role: "origin" | "destination", removable = false): string {
   return `<fieldset class="location-group" data-location-group="${prefix}">
+    <input type="hidden" name="${role}LocationPrefix" value="${prefix}" />
     <legend>${label}</legend>
+    ${removable ? `<button class="remove-location" type="button" data-remove-location="${prefix}" aria-label="Remove ${label}">Remove</button>` : ""}
     <label>Match location<select name="${prefix}Kind" data-location-kind="${prefix}"><option value="state" selected>State</option><option value="city">City + radius</option><option value="anywhere">Anywhere</option></select></label>
     <div class="location-state-fields" data-location-required><label>${label} state <input name="${prefix}State" maxlength="2" placeholder="CA" autocapitalize="characters" /></label></div>
     <div class="location-city-fields" data-city-fields hidden>
@@ -136,9 +145,34 @@ function bindInteractions(): void {
     select.addEventListener("change", () => updateLocationFields(select));
     updateLocationFields(select);
   });
+  app.querySelectorAll<HTMLButtonElement>("[data-add-location]").forEach((button) => {
+    button.addEventListener("click", () => addLocation(button.dataset.addLocation));
+  });
+  app.querySelectorAll<HTMLButtonElement>("[data-remove-location]").forEach((button) => {
+    button.addEventListener("click", () => button.closest("[data-location-group]")?.remove());
+  });
   app.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((button) => {
     button.addEventListener("click", () => { void manageAlert(button); });
   });
+}
+
+function addLocation(role: string | undefined): void {
+  if (role !== "origin" && role !== "destination") return;
+  const list = app.querySelector<HTMLElement>(`[data-location-list="${role}"]`);
+  if (list === null) return;
+  let index = 2;
+  while (list.querySelector(`[data-location-group="${role}${index}"]`) !== null) index += 1;
+  const label = `${role === "origin" ? "Origin" : "Destination"} ${index}`;
+  const addButton = list.querySelector<HTMLElement>("[data-add-location]");
+  if (addButton === null) return;
+  addButton.insertAdjacentHTML("beforebegin", locationFields(`${role}${index}`, label, role, true));
+  const group = list.querySelector<HTMLElement>(`[data-location-group="${role}${index}"]`);
+  const select = group?.querySelector<HTMLSelectElement>("[data-location-kind]");
+  if (select !== undefined && select !== null) {
+    select.addEventListener("change", () => updateLocationFields(select));
+    updateLocationFields(select);
+  }
+  group?.querySelector<HTMLButtonElement>("[data-remove-location]")?.addEventListener("click", () => group.remove());
 }
 
 function updateLocationFields(select: HTMLSelectElement): void {
@@ -205,8 +239,8 @@ function filterFromForm(form: HTMLFormElement): CanonicalFilter {
   return {
     schemaVersion: 1,
     name: requiredText(data.get("name"), "Name"),
-    origins: [locationFromForm(data, "origin")],
-    destinations: [locationFromForm(data, "destination")],
+    origins: locationsFromForm(data, "origin"),
+    destinations: locationsFromForm(data, "destination"),
     trailerTypes: [data.get("trailer") === "enclosed" ? "enclosed" : "open"],
     vehicles: { minimum, maximum },
     readiness: { kind: "any" },
@@ -231,9 +265,10 @@ function requiredText(value: FormDataEntryValue | null, label: string): string {
 }
 
 function locationLabel(locations: CanonicalFilter["origins"]): string {
-  const location = locations[0];
-  if (location === undefined || location.kind === "anywhere") return "Anywhere";
-  return location.kind === "state" ? location.state : `${location.city}, ${location.state}`;
+  return locations.map((location) => {
+    if (location.kind === "anywhere") return "Anywhere";
+    return location.kind === "state" ? location.state : `${location.city}, ${location.state}`;
+  }).join(" / ");
 }
 
 function shortLocation(location: { readonly city: string | null; readonly state: string | null }): string {
