@@ -57,6 +57,10 @@ export {
   CentralDispatchHealthReporter,
   type CentralDispatchHealthLogger
 } from "./central-dispatch-health-reporter.js";
+export {
+  CentralDispatchTabReporter,
+  type CentralDispatchTabLogger
+} from "./central-dispatch-tab-reporter.js";
 
 export interface ProviderSearchConfiguration {
   readonly sessionId: string;
