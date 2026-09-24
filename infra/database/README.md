@@ -11,6 +11,7 @@ psql "$DATABASE_URL" -f infra/database/migrations/0003_durable_search_detection_
 psql "$DATABASE_URL" -f infra/database/migrations/0004_browser_runtime_metadata.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0005_browser_tab_recovery_backoff.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0006_plans_and_subscriptions.sql
+psql "$DATABASE_URL" -f infra/database/migrations/0007_free_and_essential_plans.sql
 ```
 
 The application must use three transactional patterns:

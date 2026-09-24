@@ -6,6 +6,8 @@ export interface AccountEntitlement {
   readonly planId: string;
   readonly planName: string;
   readonly maxActiveAlerts: number;
+  readonly maxSavedAlerts: number;
+  readonly monthlyPriceCents: number;
   readonly activeAlertCount: number;
   readonly subscriptionStatus: SubscriptionStatus;
   readonly currentPeriodEndsAt: string | null;
@@ -19,7 +21,7 @@ export class PostgresEntitlementRepository {
   public constructor(private readonly database: SqlExecutor) {}
 
   public async getForUser(userId: string): Promise<AccountEntitlement> {
-    const result = await this.database.query(`SELECT plans.id AS plan_id, plans.name AS plan_name, plans.max_active_alerts,
+    const result = await this.database.query(`SELECT plans.id AS plan_id, plans.name AS plan_name, plans.max_active_alerts, plans.max_saved_alerts, plans.monthly_price_cents,
         subscriptions.status, subscriptions.current_period_ends_at, subscriptions.cancel_at_period_end,
         (SELECT count(*) FROM alerts WHERE user_id = users.id AND status = 'active') AS active_alert_count
       FROM users JOIN subscriptions ON subscriptions.user_id = users.id JOIN plans ON plans.id = subscriptions.plan_id
@@ -50,6 +52,8 @@ function entitlement(row: Record<string, unknown> | undefined): AccountEntitleme
     planId: text(row.plan_id, "plan ID"),
     planName: text(row.plan_name, "plan name"),
     maxActiveAlerts: count(row.max_active_alerts, "plan alert limit"),
+    maxSavedAlerts: count(row.max_saved_alerts, "plan saved-alert limit"),
+    monthlyPriceCents: count(row.monthly_price_cents, "plan price", true),
     activeAlertCount: count(row.active_alert_count, "active alert count", true),
     subscriptionStatus: status,
     currentPeriodEndsAt: row.current_period_ends_at === null || row.current_period_ends_at === undefined ? null : timestamp(row.current_period_ends_at),

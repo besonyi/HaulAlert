@@ -14,6 +14,7 @@ export { PostgresAdminDashboardRepository, type AdminSystemOverview, type Operat
 export { PostgresAdminSearchRepository, normalizeAdminSearchQuery, type AdminSearchResults } from "./admin-search.js";
 export { PostgresBrokerDirectoryRepository, normalizeBrokerQuery, type BrokerProfile } from "./broker-directory.js";
 export { InactiveSubscriptionError, PlanLimitExceededError, PostgresEntitlementRepository, type AccountEntitlement } from "./entitlements.js";
+export { PostgresTelegramUserResolver } from "./telegram-user-resolver.js";
 export { getAdminTelegramUserIds, isAdminTelegramUser } from "./admin-access.js";
 
 export type ManagedAlertStatus = "active" | "paused";

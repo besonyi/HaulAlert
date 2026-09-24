@@ -8,6 +8,8 @@ import type {
 } from "./index.js";
 import { InactiveSubscriptionError, PlanLimitExceededError } from "./entitlements.js";
 
+type AuthenticatedApiUser = AuthenticatedTelegramUser & { readonly telegramUserId?: string };
+
 const maximumRequestBodyBytes = 1_000_000;
 
 export interface MiniAppApiDependencies {
@@ -22,7 +24,7 @@ export interface MiniAppApiDependencies {
     cancelAtPeriodEnd(userId: string): Promise<unknown | undefined>;
   };
   readonly isAdmin?: (telegramUserId: string) => boolean;
-  readonly authenticate: (initData: string) => AuthenticatedTelegramUser;
+  readonly authenticate: (initData: string) => AuthenticatedApiUser | Promise<AuthenticatedApiUser>;
 }
 
 /** Creates the authenticated, customer-facing API used by the Telegram Mini App. */
@@ -44,9 +46,9 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
   const pathname = url.pathname;
   if (!pathname.startsWith("/v1/")) return { statusCode: 404, body: { error: "not_found" } };
 
-  let user: AuthenticatedTelegramUser;
+  let user: AuthenticatedApiUser;
   try {
-    user = dependencies.authenticate(getInitData(request));
+    user = await dependencies.authenticate(getInitData(request));
   } catch {
     return { statusCode: 401, body: { error: "unauthorized" } };
   }
@@ -54,13 +56,13 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
   try {
     if (pathname === "/v1/admin/overview" && request.method === "GET") {
       if (dependencies.adminDashboard === undefined || dependencies.isAdmin === undefined) return { statusCode: 404, body: { error: "not_found" } };
-      return dependencies.isAdmin(user.id)
+      return dependencies.isAdmin(user.telegramUserId ?? user.id)
         ? { statusCode: 200, body: { overview: await dependencies.adminDashboard.getOverview() } }
         : { statusCode: 403, body: { error: "forbidden" } };
     }
     if (pathname === "/v1/admin/search" && request.method === "GET") {
       if (dependencies.adminSearch === undefined || dependencies.isAdmin === undefined) return { statusCode: 404, body: { error: "not_found" } };
-      if (!dependencies.isAdmin(user.id)) return { statusCode: 403, body: { error: "forbidden" } };
+      if (!dependencies.isAdmin(user.telegramUserId ?? user.id)) return { statusCode: 403, body: { error: "forbidden" } };
       const query = url.searchParams.get("q")?.trim() ?? "";
       if (query.length < 2 || query.length > 80) return { statusCode: 400, body: { error: "invalid_search_query" } };
       return { statusCode: 200, body: { results: await dependencies.adminSearch.search(query) } };

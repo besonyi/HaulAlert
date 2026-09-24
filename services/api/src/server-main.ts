@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository } from "./index.js";
+import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresTelegramUserResolver } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
@@ -29,6 +29,7 @@ export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env)
 export async function runApiServer(config: ApiServerConfig = getApiServerConfig()): Promise<void> {
   const pool = new Pool({ connectionString: config.databaseUrl });
   const database = new PgPoolSqlExecutor(pool);
+  const telegramUsers = new PostgresTelegramUserResolver(database);
   const server = createMiniAppApiServer({
     alerts: new PostgresAlertRepository(database),
     dashboard: new PostgresDashboardRepository(database),
@@ -37,7 +38,12 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
     brokerDirectory: new PostgresBrokerDirectoryRepository(database),
     entitlements: new PostgresEntitlementRepository(database),
     isAdmin: (telegramUserId) => isAdminTelegramUser(telegramUserId, config.adminTelegramUserIds),
-    authenticate: (initData) => verifyTelegramMiniAppInitData(initData, config.telegramBotToken)
+    authenticate: async (initData) => {
+      const telegram = verifyTelegramMiniAppInitData(initData, config.telegramBotToken);
+      const userId = await telegramUsers.resolve(telegram.id);
+      if (userId === undefined) throw new Error("Telegram account has not completed Bot onboarding");
+      return { ...telegram, id: userId, telegramUserId: telegram.id };
+    }
   });
 
   try {

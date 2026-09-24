@@ -5,10 +5,10 @@ import { PlanLimitExceededError, PostgresEntitlementRepository } from "./entitle
 
 test("entitlements expose the active plan and enforce its alert limit", async () => {
   const repository = new PostgresEntitlementRepository({
-    query: async () => ({ rows: [{ plan_id: "starter", plan_name: "Starter", max_active_alerts: "3", active_alert_count: "3", status: "active", current_period_ends_at: null, cancel_at_period_end: false }] })
+    query: async () => ({ rows: [{ plan_id: "free", plan_name: "Free", max_active_alerts: "1", max_saved_alerts: "1", monthly_price_cents: "0", active_alert_count: "1", status: "active", current_period_ends_at: null, cancel_at_period_end: false }] })
   });
   assert.deepEqual(await repository.getForUser("11111111-1111-4111-8111-111111111111"), {
-    planId: "starter", planName: "Starter", maxActiveAlerts: 3, activeAlertCount: 3, subscriptionStatus: "active", currentPeriodEndsAt: null, cancelAtPeriodEnd: false
+    planId: "free", planName: "Free", maxActiveAlerts: 1, maxSavedAlerts: 1, monthlyPriceCents: 0, activeAlertCount: 1, subscriptionStatus: "active", currentPeriodEndsAt: null, cancelAtPeriodEnd: false
   });
   await assert.rejects(() => repository.assertCanCreateAlert("11111111-1111-4111-8111-111111111111"), PlanLimitExceededError);
 });
@@ -19,7 +19,7 @@ test("cancelling a subscription keeps its current entitlement available", async 
     query: async () => {
       calls += 1;
       if (calls === 1) return { rows: [{ plan_id: "starter", status: "active", current_period_ends_at: null, cancel_at_period_end: true }] };
-      return { rows: [{ plan_id: "starter", plan_name: "Starter", max_active_alerts: 3, active_alert_count: 1, status: "active", current_period_ends_at: null, cancel_at_period_end: true }] };
+      return { rows: [{ plan_id: "free", plan_name: "Free", max_active_alerts: 1, max_saved_alerts: 1, monthly_price_cents: 0, active_alert_count: 1, status: "active", current_period_ends_at: null, cancel_at_period_end: true }] };
     }
   });
   assert.equal((await repository.cancelAtPeriodEnd("11111111-1111-4111-8111-111111111111"))?.cancelAtPeriodEnd, true);

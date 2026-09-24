@@ -38,6 +38,8 @@ export interface MiniAppEntitlement {
   readonly planId: string;
   readonly planName: string;
   readonly maxActiveAlerts: number;
+  readonly maxSavedAlerts: number;
+  readonly monthlyPriceCents: number;
   readonly activeAlertCount: number;
   readonly subscriptionStatus: "active" | "cancelled" | "expired";
   readonly currentPeriodEndsAt: string | null;
