@@ -203,6 +203,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/load-model
 
+  apps/admin: {}
+
   apps/bot:
     dependencies:
       '@haulalert/notification-service':
