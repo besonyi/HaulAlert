@@ -178,6 +178,9 @@ importers:
       '@haulalert/filter-compiler':
         specifier: workspace:*
         version: link:../../packages/filter-compiler
+      '@haulalert/load-model':
+        specifier: workspace:*
+        version: link:../../packages/load-model
 
   adapters/shipcars:
     dependencies:
