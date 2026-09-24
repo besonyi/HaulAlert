@@ -106,3 +106,26 @@ test("Mini App API rejects unsigned callers and malformed requests", async () =>
     });
   }
 });
+
+test("admin overview is available only to an allowlisted Telegram identity", async () => {
+  const server = createMiniAppApiServer({
+    alerts: {} as AlertManagementRepository,
+    dashboard: { getForUser: async () => ({ activeAlertCount: 0, loadsFoundLast24Hours: 0, recentNotifications: [] }) },
+    adminDashboard: { getOverview: async () => ({ users: 3, activeAlerts: 2, loads: 5, sessions: [], tabs: [], deliveries: [] }) },
+    isAdmin: (telegramUserId) => telegramUserId === "admin-telegram-id",
+    authenticate: (initData) => ({ id: initData, firstName: "Alex" })
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("Expected a TCP server address");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    assert.equal((await fetch(`${baseUrl}/v1/admin/overview`, { headers: { authorization: "tma customer" } })).status, 403);
+    const response = await fetch(`${baseUrl}/v1/admin/overview`, { headers: { authorization: "tma admin-telegram-id" } });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json() as { overview: { users: number } }).overview.users, 3);
+  } finally {
+    await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
+  }
+});
