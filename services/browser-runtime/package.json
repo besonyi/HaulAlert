@@ -23,6 +23,7 @@
     "@haulalert/adapter-super-dispatch": "workspace:*",
     "@haulalert/browser-runtime-core": "workspace:*",
     "@haulalert/filter-compiler": "workspace:*",
+    "@haulalert/ingestion-service": "workspace:*",
     "@haulalert/load-model": "workspace:*",
     "@haulalert/new-load-detector": "workspace:*"
   }
