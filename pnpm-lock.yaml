@@ -209,6 +209,9 @@ importers:
       '@haulalert/canonical-filter':
         specifier: workspace:*
         version: link:../../packages/canonical-filter
+      '@haulalert/load-model':
+        specifier: workspace:*
+        version: link:../../packages/load-model
 
   packages/alert-matcher:
     dependencies:
@@ -271,6 +274,9 @@ importers:
       '@haulalert/canonical-filter':
         specifier: workspace:*
         version: link:../../packages/canonical-filter
+      '@haulalert/load-model':
+        specifier: workspace:*
+        version: link:../../packages/load-model
       '@haulalert/notification-service':
         specifier: workspace:*
         version: link:../notifications

@@ -11,6 +11,7 @@
     "start": "node scripts/serve.mjs"
   },
   "dependencies": {
-    "@haulalert/canonical-filter": "workspace:*"
+    "@haulalert/canonical-filter": "workspace:*",
+    "@haulalert/load-model": "workspace:*"
   }
 }

@@ -41,6 +41,7 @@ test("Mini App API authenticates identity and scopes alert operations to it", as
   };
   const server = createMiniAppApiServer({
     alerts: repository,
+    dashboard: { getForUser: async (id) => ({ activeAlertCount: id === userId ? 1 : 0, loadsFoundLast24Hours: 2, recentNotifications: [] }) },
     authenticate: (initData) => {
       assert.equal(initData, "verified-init-data");
       return { id: userId, firstName: "Alex" };
@@ -58,6 +59,10 @@ test("Mini App API authenticates identity and scopes alert operations to it", as
     const list = await fetch(`${baseUrl}/v1/alerts`, { headers });
     assert.equal(list.status, 200);
     assert.equal((await list.json() as { alerts: ManagedAlert[] }).alerts[0]?.id, alertId);
+
+    const dashboard = await fetch(`${baseUrl}/v1/dashboard`, { headers });
+    assert.equal(dashboard.status, 200);
+    assert.equal((await dashboard.json() as { dashboard: { activeAlertCount: number } }).dashboard.activeAlertCount, 1);
 
     const pause = await fetch(`${baseUrl}/v1/alerts/${alertId}/pause`, { method: "POST", headers });
     assert.equal(pause.status, 200);
@@ -80,6 +85,7 @@ test("Mini App API authenticates identity and scopes alert operations to it", as
 test("Mini App API rejects unsigned callers and malformed requests", async () => {
   const server = createMiniAppApiServer({
     alerts: {} as AlertManagementRepository,
+    dashboard: { getForUser: async () => { throw new Error("should not reach dashboard"); } },
     authenticate: () => { throw new Error("bad signature"); }
   });
   server.listen(0, "127.0.0.1");

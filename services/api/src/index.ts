@@ -2,6 +2,7 @@ import {
   parseCanonicalFilter,
   type CanonicalFilter
 } from "@haulalert/canonical-filter";
+import { normalizedLoadSchema, type NormalizedLoad } from "@haulalert/load-model";
 import type { SqlExecutor } from "@haulalert/notification-service";
 
 export type ManagedAlertStatus = "active" | "paused";
@@ -32,6 +33,62 @@ export interface AlertManagementRepository {
   setStatus(alertId: string, userId: string, status: ManagedAlertStatus): Promise<ManagedAlert | undefined>;
   duplicate(alertId: string, userId: string, name: string): Promise<ManagedAlert | undefined>;
   remove(alertId: string, userId: string): Promise<boolean>;
+}
+
+export type NotificationDeliveryStatus = "queued" | "delivering" | "retry_scheduled" | "sent" | "dead_letter" | "cancelled";
+
+export interface RecentNotification {
+  readonly deliveryId: string;
+  readonly alertName: string;
+  readonly status: NotificationDeliveryStatus;
+  readonly createdAt: Date;
+  readonly sentAt: Date | null;
+  readonly load: NormalizedLoad;
+}
+
+export interface CustomerDashboard {
+  readonly activeAlertCount: number;
+  readonly loadsFoundLast24Hours: number;
+  readonly recentNotifications: readonly RecentNotification[];
+}
+
+export interface DashboardRepository {
+  getForUser(userId: string, recentLimit?: number): Promise<CustomerDashboard>;
+}
+
+/** Customer-visible alert and delivery summary, always scoped to one user. */
+export class PostgresDashboardRepository implements DashboardRepository {
+  public constructor(private readonly database: SqlExecutor) {}
+
+  public async getForUser(userId: string, recentLimit: number = 8): Promise<CustomerDashboard> {
+    if (!Number.isInteger(recentLimit) || recentLimit < 1 || recentLimit > 50) {
+      throw new Error("recentLimit must be an integer between 1 and 50");
+    }
+    const counts = await this.database.query(
+      `SELECT
+        (SELECT count(*) FROM alerts WHERE user_id = $1::uuid AND status = 'active') AS active_alert_count,
+        (SELECT count(DISTINCT load_id) FROM notification_deliveries
+          WHERE user_id = $1::uuid AND created_at >= now() - interval '24 hours') AS loads_found_last_24_hours`,
+      [userId]
+    );
+    const recent = await this.database.query(
+      `SELECT d.id AS delivery_id, a.name AS alert_name, d.status, d.created_at, d.sent_at, l.normalized_load
+      FROM notification_deliveries AS d
+      INNER JOIN loads AS l ON l.id = d.load_id
+      INNER JOIN alerts AS a ON a.id = d.alert_id
+      WHERE d.user_id = $1::uuid
+      ORDER BY d.created_at DESC, d.id DESC
+      LIMIT $2`,
+      [userId, recentLimit]
+    );
+    const row = counts.rows[0];
+    if (row === undefined) throw new Error("Expected dashboard counts from PostgreSQL");
+    return {
+      activeAlertCount: parseCount(row.active_alert_count, "active_alert_count"),
+      loadsFoundLast24Hours: parseCount(row.loads_found_last_24_hours, "loads_found_last_24_hours"),
+      recentNotifications: recent.rows.map(parseRecentNotification)
+    };
+  }
 }
 
 /** PostgreSQL repository for the customer-facing alert lifecycle. */
@@ -157,6 +214,30 @@ function parseDate(value: unknown, column: string): Date {
   const date = value instanceof Date ? value : new Date(requiredString(value, column));
   if (Number.isNaN(date.getTime())) throw new Error(`Expected ${column} to be a valid timestamp`);
   return date;
+}
+
+function parseRecentNotification(row: Record<string, unknown>): RecentNotification {
+  const status = row.status;
+  if (
+    status !== "queued" && status !== "delivering" && status !== "retry_scheduled"
+    && status !== "sent" && status !== "dead_letter" && status !== "cancelled"
+  ) {
+    throw new Error("Unexpected persisted notification status");
+  }
+  return {
+    deliveryId: requiredString(row.delivery_id, "delivery_id"),
+    alertName: requiredString(row.alert_name, "alert_name"),
+    status,
+    createdAt: parseDate(row.created_at, "created_at"),
+    sentAt: row.sent_at === null || row.sent_at === undefined ? null : parseDate(row.sent_at, "sent_at"),
+    load: normalizedLoadSchema.parse(parseJson(row.normalized_load, "normalized_load"))
+  };
+}
+
+function parseCount(value: unknown, column: string): number {
+  const count = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(count) || count < 0) throw new Error(`Expected ${column} to be a non-negative count`);
+  return count;
 }
 
 export {

@@ -1,6 +1,11 @@
 import type { CanonicalFilter } from "@haulalert/canonical-filter";
 
-import { MiniAppApiClient, MiniAppApiError, type MiniAppAlert } from "./api.js";
+import {
+  MiniAppApiClient,
+  MiniAppApiError,
+  type MiniAppAlert,
+  type MiniAppDashboard
+} from "./api.js";
 
 interface TelegramWebApp {
   readonly initData: string;
@@ -24,6 +29,7 @@ telegram?.expand();
 applyTelegramTheme(telegram);
 
 let alerts: readonly MiniAppAlert[] = [];
+let dashboard: MiniAppDashboard | undefined;
 let screen: "dashboard" | "create" = "dashboard";
 let message = telegram?.initData ? "" : "Open HaulAlert from Telegram to manage alerts.";
 const client = telegram?.initData ? new MiniAppApiClient(telegram.initData) : undefined;
@@ -33,7 +39,7 @@ void refresh();
 async function refresh(): Promise<void> {
   if (client === undefined) return render();
   try {
-    alerts = await client.listAlerts();
+    [alerts, dashboard] = await Promise.all([client.listAlerts(), client.getDashboard()]);
     message = "";
   } catch (error: unknown) {
     message = readableError(error);
@@ -60,11 +66,22 @@ function render(): void {
 
 function dashboardMarkup(): string {
   return `<section class="content">
-    <div class="summary"><span class="summary-count">${alerts.filter((alert) => alert.status === "active").length}</span><span>active alerts monitoring new loads</span></div>
+    <div class="summary-grid"><div class="summary"><span class="summary-count">${dashboard?.activeAlertCount ?? alerts.filter((alert) => alert.status === "active").length}</span><span>active alerts</span></div><div class="summary"><span class="summary-count">${dashboard?.loadsFoundLast24Hours ?? 0}</span><span>loads found today</span></div></div>
     ${alerts.length === 0
       ? `<div class="empty"><span class="empty-icon">⌁</span><h2>No alerts yet</h2><p>Create your first route and we’ll notify you when a matching load appears.</p><button class="primary" data-screen="create">Create alert</button></div>`
       : `<div class="cards">${alerts.map(alertMarkup).join("")}</div>`}
+    ${recentNotificationsMarkup()}
   </section>`;
+}
+
+function recentNotificationsMarkup(): string {
+  const notifications = dashboard?.recentNotifications ?? [];
+  if (notifications.length === 0) return "";
+  return `<section class="recent"><h2>Recent load alerts</h2>${notifications.map((notification) => {
+    const route = `${shortLocation(notification.load.pickup)} → ${shortLocation(notification.load.delivery)}`;
+    const status = notification.status === "sent" ? "Sent" : notification.status.replaceAll("_", " ");
+    return `<article class="recent-item"><div><strong>${escapeHtml(route)}</strong><span>${escapeHtml(notification.alertName)} · ${escapeHtml(status)}</span></div><span class="recent-pay">${notification.load.payUsd === null ? "—" : `$${notification.load.payUsd.toLocaleString()}`}</span></article>`;
+  }).join("")}</section>`;
 }
 
 function alertMarkup(alert: MiniAppAlert): string {
@@ -197,6 +214,10 @@ function locationLabel(locations: CanonicalFilter["origins"]): string {
   const location = locations[0];
   if (location === undefined || location.kind === "anywhere") return "Anywhere";
   return location.kind === "state" ? location.state : `${location.city}, ${location.state}`;
+}
+
+function shortLocation(location: { readonly city: string | null; readonly state: string | null }): string {
+  return [location.city, location.state].filter((part): part is string => part !== null).join(", ") || "Unknown";
 }
 
 function readableError(error: unknown): string {

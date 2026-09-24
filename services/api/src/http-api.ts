@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type {
   AlertManagementRepository,
   AuthenticatedTelegramUser,
+  DashboardRepository,
   ManagedAlert
 } from "./index.js";
 
@@ -10,6 +11,7 @@ const maximumRequestBodyBytes = 1_000_000;
 
 export interface MiniAppApiDependencies {
   readonly alerts: AlertManagementRepository;
+  readonly dashboard: DashboardRepository;
   readonly authenticate: (initData: string) => AuthenticatedTelegramUser;
 }
 
@@ -39,6 +41,9 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
   }
 
   try {
+    if (pathname === "/v1/dashboard" && request.method === "GET") {
+      return { statusCode: 200, body: { dashboard: await dependencies.dashboard.getForUser(user.id) } };
+    }
     if (pathname === "/v1/alerts" && request.method === "GET") {
       return { statusCode: 200, body: { alerts: await dependencies.alerts.listForUser(user.id) } };
     }

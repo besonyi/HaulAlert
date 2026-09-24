@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { PostgresAlertRepository } from "./index.js";
+import { PostgresAlertRepository, PostgresDashboardRepository } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
@@ -26,8 +26,10 @@ export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env)
 /** Runs the authenticated Mini App API until SIGINT or SIGTERM. */
 export async function runApiServer(config: ApiServerConfig = getApiServerConfig()): Promise<void> {
   const pool = new Pool({ connectionString: config.databaseUrl });
+  const database = new PgPoolSqlExecutor(pool);
   const server = createMiniAppApiServer({
-    alerts: new PostgresAlertRepository(new PgPoolSqlExecutor(pool)),
+    alerts: new PostgresAlertRepository(database),
+    dashboard: new PostgresDashboardRepository(database),
     authenticate: (initData) => verifyTelegramMiniAppInitData(initData, config.telegramBotToken)
   });
 
