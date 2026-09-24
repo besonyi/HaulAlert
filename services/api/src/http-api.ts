@@ -14,6 +14,7 @@ export interface MiniAppApiDependencies {
   readonly dashboard: DashboardRepository;
   readonly adminDashboard?: { getOverview(): Promise<unknown> };
   readonly adminSearch?: { search(query: string): Promise<unknown> };
+  readonly brokerDirectory?: { search(query: string): Promise<unknown> };
   readonly isAdmin?: (telegramUserId: string) => boolean;
   readonly authenticate: (initData: string) => AuthenticatedTelegramUser;
 }
@@ -57,6 +58,12 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       const query = url.searchParams.get("q")?.trim() ?? "";
       if (query.length < 2 || query.length > 80) return { statusCode: 400, body: { error: "invalid_search_query" } };
       return { statusCode: 200, body: { results: await dependencies.adminSearch.search(query) } };
+    }
+    if (pathname === "/v1/brokers" && request.method === "GET") {
+      if (dependencies.brokerDirectory === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      const query = url.searchParams.get("q")?.trim() ?? "";
+      if (query.length < 2 || query.length > 80) return { statusCode: 400, body: { error: "invalid_broker_query" } };
+      return { statusCode: 200, body: { brokers: await dependencies.brokerDirectory.search(query) } };
     }
     if (pathname === "/v1/dashboard" && request.method === "GET") {
       return { statusCode: 200, body: { dashboard: await dependencies.dashboard.getForUser(user.id) } };

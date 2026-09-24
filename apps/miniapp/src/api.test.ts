@@ -63,3 +63,14 @@ test("Mini App API client surfaces a safe API failure", async () => {
     return true;
   });
 });
+
+test("Mini App API client searches broker profiles with Telegram authorization", async () => {
+  let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
+  const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {
+    captured = { input, ...(init === undefined ? {} : { init }) };
+    return new Response(JSON.stringify({ brokers: [] }));
+  });
+  await client.searchBrokers("MC 123");
+  assert.equal(captured?.input, "/api/v1/brokers?q=MC%20123");
+  assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
+});

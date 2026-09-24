@@ -4,6 +4,7 @@ import {
   MiniAppApiClient,
   MiniAppApiError,
   type MiniAppAlert,
+  type MiniAppBrokerProfile,
   type MiniAppDashboard
 } from "./api.js";
 import { locationsFromForm } from "./location-form.js";
@@ -35,6 +36,9 @@ let alerts: readonly MiniAppAlert[] = [];
 let dashboard: MiniAppDashboard | undefined;
 let screen: "dashboard" | "create" = "dashboard";
 let editingAlert: MiniAppAlert | undefined;
+let blockedBrokerIds: readonly string[] = [];
+let brokerResults: readonly MiniAppBrokerProfile[] = [];
+let brokerSearchMessage = "";
 let message = telegram?.initData ? "" : "Open HaulAlert from Telegram to manage alerts.";
 const client = telegram?.initData ? new MiniAppApiClient(telegram.initData) : undefined;
 
@@ -117,9 +121,32 @@ function createMarkup(): string {
     <div class="form-grid"><label>Trailer<select name="trailer"><option value="open"${selected(filter?.trailerTypes.includes("open") ?? true)}>Open</option><option value="enclosed"${selected(filter?.trailerTypes.includes("enclosed") ?? false)}>Enclosed</option></select></label><label>Minimum pay<input name="minimumPay" type="number" min="0" step="50" placeholder="Any" value="${formValue(filter?.minimumPayUsd)}" /></label></div>
     <div class="form-grid"><label>Min vehicles<input name="minimumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.minimum)}" /></label><label>Max vehicles<input name="maximumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.maximum)}" /></label></div>
     <fieldset><legend>Load boards</legend><p class="provider-help">Choose where HaulAlert should look. Your alert is matched only against the boards selected here.</p><label class="check"><input type="checkbox" name="provider" value="central-dispatch"${checked(filter, "central-dispatch")} />Central Dispatch</label><label class="check"><input type="checkbox" name="provider" value="super-dispatch"${checked(filter, "super-dispatch")} />Super Dispatch</label><label class="check"><input type="checkbox" name="provider" value="shipcars"${checked(filter, "shipcars")} />Ship.Cars</label><p class="provider-summary" data-provider-summary role="status">${escapeHtml(providerMonitoringSummary(filter?.providers ?? defaultProviders))}</p></fieldset>
+    ${brokerBlocksMarkup()}
     <button class="primary submit" type="submit">${editing ? "Save changes" : "Start monitoring"}</button>
     ${editing ? `<button class="secondary cancel" type="button" data-screen="dashboard">Cancel</button>` : ""}
   </form>`;
+}
+
+function brokerBlocksMarkup(): string {
+  return `<fieldset class="broker-blocks"><legend>Blocked brokers</legend><p class="provider-help">Search by broker name, MC, or DOT. Only MC/DOT identities are used for blocking.</p>
+    <div data-broker-blocks>${blockedBrokerListMarkup()}</div>
+    <div class="broker-search"><input name="brokerQuery" maxlength="80" placeholder="Broker name, MC, or DOT" /><button class="secondary" type="button" data-broker-search>Find broker</button></div>
+    <div data-broker-results>${brokerResultsMarkup()}</div>
+  </fieldset>`;
+}
+
+function blockedBrokerListMarkup(): string {
+  if (blockedBrokerIds.length === 0) return `<p class="provider-help">No brokers are blocked for this alert.</p>`;
+  return blockedBrokerIds.map((id) => `<div class="broker-chip"><span>${escapeHtml(brokerIdLabel(id))}</span><input type="hidden" name="blockedBrokerId" value="${escapeHtml(id)}" /><button type="button" data-remove-broker="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(brokerIdLabel(id))}">Remove</button></div>`).join("");
+}
+
+function brokerResultsMarkup(): string {
+  if (brokerSearchMessage) return `<p class="provider-help">${escapeHtml(brokerSearchMessage)}</p>`;
+  return brokerResults.map((broker, index) => {
+    const ids = brokerIds(broker);
+    const details = [broker.mcNumber === null ? undefined : `MC ${broker.mcNumber}`, broker.dotNumber === null ? undefined : `DOT ${broker.dotNumber}`].filter((value): value is string => value !== undefined).join(" · ");
+    return `<div class="broker-result"><div><strong>${escapeHtml(broker.name)}</strong><span>${escapeHtml(details || "No stable MC/DOT ID available")}</span></div>${ids.length === 0 ? "" : `<button class="secondary" type="button" data-add-broker="${index}">Block</button>`}</div>`;
+  }).join("");
 }
 
 function locationList(role: "origin" | "destination", label: string, initialLocations: CanonicalFilter["origins"] | undefined): string {
@@ -154,7 +181,7 @@ function locationFields(prefix: string, label: string, role: "origin" | "destina
 
 function bindInteractions(): void {
   app.querySelectorAll<HTMLElement>("[data-screen]").forEach((element) => {
-    element.addEventListener("click", () => { screen = element.dataset.screen === "create" ? "create" : "dashboard"; editingAlert = undefined; message = ""; render(); });
+    element.addEventListener("click", () => { screen = element.dataset.screen === "create" ? "create" : "dashboard"; editingAlert = undefined; blockedBrokerIds = []; brokerResults = []; brokerSearchMessage = ""; message = ""; render(); });
   });
   app.querySelector<HTMLFormElement>("#alert-form")?.addEventListener("submit", (event) => { void createAlert(event); });
   app.querySelectorAll<HTMLSelectElement>("[data-location-kind]").forEach((select) => {
@@ -173,6 +200,13 @@ function bindInteractions(): void {
   updateProviderSummary();
   app.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((button) => {
     button.addEventListener("click", () => { void manageAlert(button); });
+  });
+  app.querySelector<HTMLButtonElement>("[data-broker-search]")?.addEventListener("click", () => { void searchBrokers(); });
+  app.querySelectorAll<HTMLButtonElement>("[data-add-broker]").forEach((button) => {
+    button.addEventListener("click", () => addBrokerResult(button.dataset.addBroker));
+  });
+  app.querySelectorAll<HTMLButtonElement>("[data-remove-broker]").forEach((button) => {
+    button.addEventListener("click", () => removeBlockedBroker(button.dataset.removeBroker));
   });
 }
 
@@ -228,6 +262,9 @@ async function createAlert(event: SubmitEvent): Promise<void> {
       message = "Alert updated.";
     }
     editingAlert = undefined;
+    blockedBrokerIds = [];
+    brokerResults = [];
+    brokerSearchMessage = "";
     screen = "dashboard";
   } catch (error: unknown) {
     message = readableError(error);
@@ -243,6 +280,9 @@ async function manageAlert(button: HTMLButtonElement): Promise<void> {
       const original = alerts.find((alert) => alert.id === alertId);
       if (original === undefined) return;
       editingAlert = original;
+      blockedBrokerIds = [...original.filter.blockedBrokerIds];
+      brokerResults = [];
+      brokerSearchMessage = "";
       screen = "create";
       message = "";
     }
@@ -269,6 +309,67 @@ async function manageAlert(button: HTMLButtonElement): Promise<void> {
     message = readableError(error);
   }
   render();
+}
+
+async function searchBrokers(): Promise<void> {
+  if (client === undefined) return;
+  const input = app.querySelector<HTMLInputElement>('input[name="brokerQuery"]');
+  const query = input?.value.trim() ?? "";
+  if (query.length < 2 || query.length > 80) {
+    brokerResults = [];
+    brokerSearchMessage = "Enter 2 to 80 characters to search brokers.";
+    updateBrokerUi();
+    return;
+  }
+  try {
+    brokerResults = await client.searchBrokers(query);
+    brokerSearchMessage = brokerResults.length === 0 ? "No matching broker profiles found." : "";
+  } catch (error: unknown) {
+    brokerResults = [];
+    brokerSearchMessage = readableError(error);
+  }
+  updateBrokerUi();
+}
+
+function addBrokerResult(indexValue: string | undefined): void {
+  const index = indexValue === undefined ? NaN : Number(indexValue);
+  const broker = Number.isInteger(index) ? brokerResults[index] : undefined;
+  if (broker === undefined) return;
+  blockedBrokerIds = [...new Set([...blockedBrokerIds, ...brokerIds(broker)])];
+  updateBrokerUi();
+}
+
+function removeBlockedBroker(identity: string | undefined): void {
+  if (identity === undefined) return;
+  blockedBrokerIds = blockedBrokerIds.filter((id) => id !== identity);
+  updateBrokerUi();
+}
+
+function updateBrokerUi(): void {
+  const blocks = app.querySelector<HTMLElement>("[data-broker-blocks]");
+  const results = app.querySelector<HTMLElement>("[data-broker-results]");
+  if (blocks === null || results === null) return;
+  blocks.innerHTML = blockedBrokerListMarkup();
+  results.innerHTML = brokerResultsMarkup();
+  app.querySelectorAll<HTMLButtonElement>("[data-add-broker]").forEach((button) => {
+    button.addEventListener("click", () => addBrokerResult(button.dataset.addBroker));
+  });
+  app.querySelectorAll<HTMLButtonElement>("[data-remove-broker]").forEach((button) => {
+    button.addEventListener("click", () => removeBlockedBroker(button.dataset.removeBroker));
+  });
+}
+
+function brokerIds(broker: MiniAppBrokerProfile): readonly string[] {
+  return [
+    broker.mcNumber === null ? undefined : `mc:${broker.mcNumber.trim().toLowerCase()}`,
+    broker.dotNumber === null ? undefined : `dot:${broker.dotNumber.trim().toLowerCase()}`
+  ].filter((id): id is string => id !== undefined);
+}
+
+function brokerIdLabel(value: string): string {
+  if (value.startsWith("mc:")) return `MC ${value.slice(3)}`;
+  if (value.startsWith("dot:")) return `DOT ${value.slice(4)}`;
+  return value;
 }
 
 function selected(value: boolean): string {
@@ -305,7 +406,7 @@ function filterFromForm(form: HTMLFormElement): CanonicalFilter {
     minimumPayUsd: numberOrNull(data.get("minimumPay")),
     minimumRatePerMile: null,
     providers,
-    blockedBrokerIds: []
+    blockedBrokerIds: data.getAll("blockedBrokerId").filter((value): value is string => typeof value === "string" && /^(mc|dot):.+$/i.test(value))
   };
 }
 

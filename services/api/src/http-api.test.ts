@@ -42,6 +42,7 @@ test("Mini App API authenticates identity and scopes alert operations to it", as
   const server = createMiniAppApiServer({
     alerts: repository,
     dashboard: { getForUser: async (id) => ({ activeAlertCount: id === userId ? 1 : 0, loadsFoundLast24Hours: 2, recentNotifications: [] }) },
+    brokerDirectory: { search: async (query) => [{ name: "Example", mcNumber: query, dotNumber: null, matchedLoadCount: 1 }] },
     authenticate: (initData) => {
       assert.equal(initData, "verified-init-data");
       return { id: userId, firstName: "Alex" };
@@ -63,6 +64,10 @@ test("Mini App API authenticates identity and scopes alert operations to it", as
     const dashboard = await fetch(`${baseUrl}/v1/dashboard`, { headers });
     assert.equal(dashboard.status, 200);
     assert.equal((await dashboard.json() as { dashboard: { activeAlertCount: number } }).dashboard.activeAlertCount, 1);
+
+    const brokers = await fetch(`${baseUrl}/v1/brokers?q=123`, { headers });
+    assert.equal(brokers.status, 200);
+    assert.equal((await brokers.json() as { brokers: { mcNumber: string }[] }).brokers[0]?.mcNumber, "123");
 
     const pause = await fetch(`${baseUrl}/v1/alerts/${alertId}/pause`, { method: "POST", headers });
     assert.equal(pause.status, 200);

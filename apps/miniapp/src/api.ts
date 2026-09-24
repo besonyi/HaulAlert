@@ -27,6 +27,13 @@ export interface MiniAppDashboard {
   readonly recentNotifications: readonly MiniAppRecentNotification[];
 }
 
+export interface MiniAppBrokerProfile {
+  readonly name: string;
+  readonly mcNumber: string | null;
+  readonly dotNumber: string | null;
+  readonly matchedLoadCount: number;
+}
+
 export class MiniAppApiError extends Error {
   public constructor(readonly statusCode: number, readonly code: string) {
     super(code);
@@ -48,6 +55,11 @@ export class MiniAppApiClient {
   public async getDashboard(): Promise<MiniAppDashboard> {
     const response = await this.send("/v1/dashboard", "GET");
     return (await response.json() as { dashboard: MiniAppDashboard }).dashboard;
+  }
+
+  public async searchBrokers(query: string): Promise<readonly MiniAppBrokerProfile[]> {
+    const response = await this.send(`/v1/brokers?q=${encodeURIComponent(query)}`, "GET");
+    return (await response.json() as { brokers: MiniAppBrokerProfile[] }).brokers;
   }
 
   public async createAlert(filter: CanonicalFilter): Promise<MiniAppAlert> {
