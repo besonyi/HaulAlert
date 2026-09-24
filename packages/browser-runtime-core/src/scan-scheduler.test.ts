@@ -9,6 +9,7 @@ const now = new Date("2026-09-23T12:00:30.000Z");
 function tab(id: string, lastScanAt: string | null, status: PersistentSearchTab["status"] = "ready"): PersistentSearchTab {
   return {
     id,
+    providerSearchId: null,
     sessionId: "session-1",
     provider: "central-dispatch",
     sourceFilterHash: `filter-${id}`,

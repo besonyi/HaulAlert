@@ -13,6 +13,8 @@ export interface BrowserSession {
 
 export interface PersistentSearchTab {
   readonly id: string;
+  /** Durable provider_searches.id when the tab is backed by PostgreSQL. */
+  readonly providerSearchId: string | null;
   readonly sessionId: string;
   readonly provider: SupportedProvider;
   readonly sourceFilterHash: string;
@@ -91,6 +93,7 @@ export class BrowserRuntime {
   public reserveSearchTab(input: {
     provider: SupportedProvider;
     sourceFilterHash: string;
+    providerSearchId?: string;
   }): SearchTabReservation {
     const reusableTab = [...this.tabs.values()].find((tab) => {
       const session = this.sessions.get(tab.sessionId);
@@ -107,6 +110,7 @@ export class BrowserRuntime {
     const session = this.pickHealthySession(input.provider);
     const tab: PersistentSearchTab = {
       id: this.createTabId(),
+      providerSearchId: input.providerSearchId ?? null,
       sessionId: session.id,
       provider: input.provider,
       sourceFilterHash: input.sourceFilterHash,

@@ -31,10 +31,14 @@ export class BrowserRuntimeOrchestrator {
     private readonly driver: ProviderSearchDriver
   ) {}
 
-  public async activateSearch(filter: CompiledProviderFilter): Promise<ActivatedSearch> {
+  public async activateSearch(
+    filter: CompiledProviderFilter,
+    providerSearchId?: string
+  ): Promise<ActivatedSearch> {
     const reservation = this.runtime.reserveSearchTab({
       provider: filter.provider,
-      sourceFilterHash: filter.sourceFilterHash
+      sourceFilterHash: filter.sourceFilterHash,
+      ...(providerSearchId === undefined ? {} : { providerSearchId })
     });
 
     if (reservation.reused) {
@@ -80,8 +84,36 @@ export interface ScanProcessor {
   process(scan: OrderedLoadScan, now?: Date): Promise<{ readonly scan: NewLoadScanResult }>;
 }
 
+export interface ScanHistoryRecorder {
+  record(input: CompletedProviderScan, result: NewLoadScanResult): Promise<void>;
+}
+
+export interface CompletedProviderScan {
+  readonly providerSearchId: string;
+  readonly scan: OrderedLoadScan;
+  readonly startedAt: Date;
+  readonly completedAt: Date;
+}
+
+export interface HistoryAwareScanProcessor extends ScanProcessor {
+  processCompletedScan(
+    completedScan: CompletedProviderScan,
+    history: ScanHistoryRecorder
+  ): Promise<{ readonly scan: NewLoadScanResult; readonly historyError?: Error }>;
+}
+
+export interface BrowserScanCoordinatorOptions {
+  readonly history?: ScanHistoryRecorder;
+  readonly clock?: () => Date;
+}
+
 export type RuntimeScanOutcome =
-  | { readonly status: "processed"; readonly tab: PersistentSearchTab; readonly result: NewLoadScanResult }
+  | {
+      readonly status: "processed";
+      readonly tab: PersistentSearchTab;
+      readonly result: NewLoadScanResult;
+      readonly historyError?: Error;
+    }
   | { readonly status: "failed"; readonly tab: PersistentSearchTab; readonly error: Error };
 
 /**
@@ -89,18 +121,29 @@ export type RuntimeScanOutcome =
  * and sends each accepted scan into the durable ingestion boundary.
  */
 export class BrowserScanCoordinator {
+  private readonly history: ScanHistoryRecorder | undefined;
+  private readonly clock: () => Date;
+
   public constructor(
     private readonly runtime: BrowserRuntime,
     private readonly scheduler: ScanScheduler,
     private readonly scanner: ProviderSearchScanner,
-    private readonly processor: ScanProcessor
-  ) {}
+    private readonly processor: ScanProcessor,
+    options: BrowserScanCoordinatorOptions = {}
+  ) {
+    if (options.history !== undefined && !isHistoryAware(processor)) {
+      throw new Error("A scan history recorder requires a history-aware scan processor");
+    }
+    this.history = options.history;
+    this.clock = options.clock ?? (() => new Date());
+  }
 
   public async processDue(limit: number, now: Date = new Date()): Promise<readonly RuntimeScanOutcome[]> {
     const outcomes: RuntimeScanOutcome[] = [];
     for (const scheduled of this.scheduler.selectDue(this.runtime.listScannableTabs(), now, limit)) {
       const { tab } = scheduled;
       try {
+        const startedAt = this.clock();
         const scan = await this.scanner.scan({
           sessionId: tab.sessionId,
           tabId: tab.id,
@@ -108,13 +151,18 @@ export class BrowserScanCoordinator {
           sourceFilterHash: tab.sourceFilterHash
         });
         assertProviderRows(scan, tab);
-        const result = await this.processor.process(scan, now);
+        const result = await this.processScan(tab, scan, startedAt, this.clock(), now);
         const updatedTab = this.runtime.recordScan(tab.id);
         this.scheduler.recordOutcome(tab.id, {
           newLoadCount: result.scan.newLoads.length,
           overflowRisk: result.scan.overflowRisk
         });
-        outcomes.push({ status: "processed", tab: updatedTab, result: result.scan });
+        outcomes.push({
+          status: "processed",
+          tab: updatedTab,
+          result: result.scan,
+          ...(result.historyError === undefined ? {} : { historyError: result.historyError })
+        });
       } catch (cause) {
         const error = cause instanceof Error ? cause : new Error("Unknown provider scan failure");
         this.scheduler.forget(tab.id);
@@ -123,10 +171,32 @@ export class BrowserScanCoordinator {
     }
     return outcomes;
   }
+
+  private async processScan(
+    tab: PersistentSearchTab,
+    scan: OrderedLoadScan,
+    startedAt: Date,
+    completedAt: Date,
+    now: Date
+  ): Promise<{ readonly scan: NewLoadScanResult; readonly historyError?: Error }> {
+    if (this.history === undefined) return this.processor.process(scan, now);
+    if (tab.providerSearchId === null) {
+      return {
+        ...(await this.processor.process(scan, now)),
+        historyError: new Error(`Search tab ${tab.id} has no durable provider search ID`)
+      };
+    }
+    const processor = this.processor as HistoryAwareScanProcessor;
+    return processor.processCompletedScan({ providerSearchId: tab.providerSearchId, scan, startedAt, completedAt }, this.history);
+  }
 }
 
 function assertProviderRows(scan: OrderedLoadScan, tab: PersistentSearchTab): void {
   if (scan.loads.some((load) => load.provider !== tab.provider)) {
     throw new Error(`Provider scan for ${tab.provider} returned rows from another provider`);
   }
+}
+
+function isHistoryAware(processor: ScanProcessor): processor is HistoryAwareScanProcessor {
+  return "processCompletedScan" in processor && typeof processor.processCompletedScan === "function";
 }

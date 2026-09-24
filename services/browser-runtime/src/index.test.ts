@@ -10,6 +10,7 @@ import {
   BrowserScanCoordinator,
   type ProviderSearchDriver,
   type ProviderSearchScanner,
+  type ScanHistoryRecorder,
   type ScanProcessor
 } from "./index.js";
 
@@ -113,5 +114,41 @@ describe("browser scan coordinator", () => {
 
     assert.equal(outcomes[0]?.status, "failed");
     assert.equal(runtime.listTabs()[0]?.status, "degraded");
+  });
+
+  it("records completed scans against their durable provider search", async () => {
+    const scanAt = new Date("2026-09-23T12:00:00.000Z");
+    const runtime = createRuntime(() => scanAt);
+    const reservation = runtime.reserveSearchTab({
+      provider: "central-dispatch",
+      sourceFilterHash: "source-hash",
+      providerSearchId: "11111111-1111-4111-8111-111111111111"
+    });
+    runtime.markTabReady(reservation.tab.id);
+    const scanner: ProviderSearchScanner = {
+      scan: async () => ({ searchId: "central-dispatch:source-hash", loads: [], isTruncated: false })
+    };
+    let completed: { providerSearchId: string; startedAt: Date; completedAt: Date } | undefined;
+    const processor: ScanProcessor & { processCompletedScan: (scan: { providerSearchId: string; startedAt: Date; completedAt: Date }, history: ScanHistoryRecorder) => Promise<{ readonly scan: { readonly newLoads: readonly []; readonly seeded: boolean; readonly boundaryFound: boolean; readonly overflowRisk: boolean } }> } = {
+      process: async () => ({ scan: { newLoads: [], seeded: true, boundaryFound: false, overflowRisk: false } }),
+      processCompletedScan: async (scan, _history) => {
+        completed = scan;
+        return { scan: { newLoads: [], seeded: true, boundaryFound: false, overflowRisk: false } };
+      }
+    };
+    const history: ScanHistoryRecorder = { record: async () => undefined };
+    const coordinator = new BrowserScanCoordinator(runtime, new ScanScheduler(), scanner, processor, {
+      history,
+      clock: () => scanAt
+    });
+
+    await coordinator.processDue(1, scanAt);
+
+    assert.deepEqual(completed, {
+      providerSearchId: "11111111-1111-4111-8111-111111111111",
+      scan: { searchId: "central-dispatch:source-hash", loads: [], isTruncated: false },
+      startedAt: scanAt,
+      completedAt: scanAt
+    });
   });
 });
