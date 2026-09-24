@@ -23,6 +23,15 @@ export {
   CentralDispatchOpenSearchTransport,
   type AuthenticatedCentralDispatchRequestExecutor
 } from "./central-dispatch-open-search-transport.js";
+export {
+  CentralDispatchCdpRequestExecutor,
+  CentralDispatchTabNotFoundError,
+  LocalChromeDevToolsRuntime,
+  createCentralDispatchCdpSessionClient,
+  createLocalCentralDispatchCdpSessionClient,
+  type ChromeDevToolsRuntime,
+  type ChromeDevToolsTarget
+} from "./central-dispatch-cdp-executor.js";
 
 export interface ProviderSearchConfiguration {
   readonly sessionId: string;
