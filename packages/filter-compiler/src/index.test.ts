@@ -5,6 +5,7 @@ import { parseCanonicalFilter } from "@haulalert/canonical-filter";
 
 import {
   compileFilterForProvider,
+  planCapacitySplit,
   type ProviderFilterCapabilities,
   ProviderNotEnabledError
 } from "./index.js";
@@ -106,5 +107,32 @@ describe("filter compiler", () => {
     assert.deepEqual(compiled.internalFilter.vehicles, { minimum: null, maximum: 5 });
     assert.equal(compiled.internalFilter.minimumPayUsd, 1500);
     assert.equal(compiled.internalFilter.minimumRatePerMile, 1.8);
+  });
+
+  it("partitions the wider provider-native route side without changing other constraints", () => {
+    const compiled = compileFilterForProvider(createFilter({
+      origins: [
+        { kind: "state", state: "CA" },
+        { kind: "state", state: "NV" }
+      ]
+    }), centralCapabilities);
+
+    const plan = planCapacitySplit(compiled);
+
+    assert.equal(plan.status, "split");
+    assert.equal(plan.status === "split" && plan.dimension, "origins");
+    assert.equal(plan.status === "split" && plan.buckets.length, 2);
+    assert.deepEqual(plan.status === "split" && plan.buckets.map((bucket) => bucket.sourceFilter.origins), [
+      [{ kind: "state", state: "CA" }],
+      [{ kind: "state", state: "NV" }]
+    ]);
+    assert.deepEqual(plan.status === "split" && plan.buckets[0]?.sourceFilter.destinations, compiled.sourceFilter.destinations);
+    assert.notEqual(plan.status === "split" && plan.buckets[0]?.sourceFilterHash, plan.status === "split" && plan.buckets[1]?.sourceFilterHash);
+  });
+
+  it("does not invent a route split when the provider search has one origin and destination", () => {
+    const plan = planCapacitySplit(compileFilterForProvider(createFilter(), centralCapabilities));
+
+    assert.deepEqual(plan, { status: "not-splittable", reason: "single-route-bucket", buckets: [] });
   });
 });

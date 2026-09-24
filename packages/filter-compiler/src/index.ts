@@ -41,6 +41,24 @@ export interface CompiledProviderFilter {
   readonly sourceFilterHash: string;
 }
 
+export interface ProviderSearchBucket {
+  readonly sourceFilter: SourceFilter;
+  readonly sourceFilterHash: string;
+}
+
+export type CapacitySplitPlan =
+  | {
+      readonly status: "split";
+      /** The route side partitioned into single-location provider searches. */
+      readonly dimension: "origins" | "destinations";
+      readonly buckets: readonly ProviderSearchBucket[];
+    }
+  | {
+      readonly status: "not-splittable";
+      readonly reason: "provider-does-not-support-routes" | "single-route-bucket";
+      readonly buckets: readonly [];
+    };
+
 /** Raised when a caller tries to compile a provider that the alert did not select. */
 export class ProviderNotEnabledError extends Error {
   public constructor(provider: SupportedProvider) {
@@ -86,6 +104,37 @@ export function compileFilterForProvider(
     internalFilter,
     sourceFilterHash: createSourceFilterHash(capabilities.provider, sourceFilter)
   };
+}
+
+/**
+ * Produces smaller, equivalent provider-native route searches after a capped
+ * result window loses its seen boundary. Each bucket retains every source
+ * constraint and partitions only one existing route side, so their union is
+ * exactly the original source filter. This planner never invents geography.
+ */
+export function planCapacitySplit(filter: Pick<CompiledProviderFilter, "provider" | "sourceFilter">): CapacitySplitPlan {
+  const origins = filter.sourceFilter.origins;
+  const destinations = filter.sourceFilter.destinations;
+  if (origins === undefined || destinations === undefined) {
+    return { status: "not-splittable", reason: "provider-does-not-support-routes", buckets: [] };
+  }
+
+  const dimension = origins.length >= destinations.length ? "origins" : "destinations";
+  const locations = dimension === "origins" ? origins : destinations;
+  if (locations.length < 2) {
+    return { status: "not-splittable", reason: "single-route-bucket", buckets: [] };
+  }
+
+  const hashes = new Set<string>();
+  const buckets: ProviderSearchBucket[] = [];
+  for (const location of locations) {
+    const sourceFilter: SourceFilter = { ...filter.sourceFilter, [dimension]: [location] };
+    const sourceFilterHash = createSourceFilterHash(filter.provider, sourceFilter);
+    if (hashes.has(sourceFilterHash)) continue;
+    hashes.add(sourceFilterHash);
+    buckets.push({ sourceFilter, sourceFilterHash });
+  }
+  return { status: "split", dimension, buckets };
 }
 
 function nativeVehicleFilter(
