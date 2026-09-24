@@ -19,6 +19,7 @@ import {
   BrowserScanCoordinator,
   CentralDispatchPollingWorker,
   CentralDispatchRuntimeCycle,
+  CentralDispatchHealthReporter,
   CentralDispatchSearchSynchronizer,
   CentralDispatchSessionMonitor,
   createLocalCentralDispatchCdpSearchGateway,
@@ -106,10 +107,12 @@ export async function runCentralDispatchWorker(
       coordinator,
       { beforeScan: () => synchronizer.synchronize() }
     );
+    const healthReporter = new CentralDispatchHealthReporter((message) => console.info(message));
 
     await new CentralDispatchPollingWorker(cycle, {
       batchSize: config.batchSize,
       pollIntervalMs: config.pollIntervalMs,
+      onCycleComplete: (result) => healthReporter.report(result),
       onCycleError: (error) => console.error(`Central Dispatch worker cycle failed: ${error.message}`)
     }).run();
   } finally {

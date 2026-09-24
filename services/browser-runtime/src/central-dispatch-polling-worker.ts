@@ -10,6 +10,7 @@ export interface CentralDispatchPollingWorkerOptions {
   readonly pollIntervalMs?: number;
   readonly clock?: () => Date;
   readonly onCycleError?: (error: Error) => void;
+  readonly onCycleComplete?: (result: CentralDispatchRuntimeCycleResult) => void;
 }
 
 /**
@@ -22,6 +23,7 @@ export class CentralDispatchPollingWorker {
   private readonly pollIntervalMs: number;
   private readonly clock: () => Date;
   private readonly onCycleError: (error: Error) => void;
+  private readonly onCycleComplete: (result: CentralDispatchRuntimeCycleResult) => void;
   private activeCycle: Promise<CentralDispatchRuntimeCycleResult> | undefined;
 
   public constructor(
@@ -32,13 +34,22 @@ export class CentralDispatchPollingWorker {
     this.pollIntervalMs = getPositiveInteger(options.pollIntervalMs, 30_000, "pollIntervalMs");
     this.clock = options.clock ?? (() => new Date());
     this.onCycleError = options.onCycleError ?? (() => undefined);
+    this.onCycleComplete = options.onCycleComplete ?? (() => undefined);
   }
 
   /** Executes one cycle, or joins an already-running cycle. */
   public processOnce(now: Date = this.clock()): Promise<CentralDispatchRuntimeCycleResult> {
     if (this.activeCycle !== undefined) return this.activeCycle;
 
-    const cycle = this.cycle.processDue(this.batchSize, now);
+    const cycle = this.cycle.processDue(this.batchSize, now)
+      .then((result) => {
+        try {
+          this.onCycleComplete(result);
+        } catch (cause) {
+          this.onCycleError(toError(cause));
+        }
+        return result;
+      });
     this.activeCycle = cycle.finally(() => {
       this.activeCycle = undefined;
     });

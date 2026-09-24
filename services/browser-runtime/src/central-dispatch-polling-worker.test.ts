@@ -26,6 +26,7 @@ function healthyResult(): CentralDispatchRuntimeCycleResult {
 describe("CentralDispatchPollingWorker", () => {
   it("shares one in-flight provider cycle across overlapping polls", async () => {
     let calls = 0;
+    let completions = 0;
     let release: (() => void) | undefined;
     const pending = new Promise<CentralDispatchRuntimeCycleResult>((resolve) => {
       release = () => resolve(healthyResult());
@@ -36,7 +37,10 @@ describe("CentralDispatchPollingWorker", () => {
         return pending;
       }
     };
-    const worker = new CentralDispatchPollingWorker(runner, { clock: () => new Date("2026-09-24T12:00:00.000Z") });
+    const worker = new CentralDispatchPollingWorker(runner, {
+      clock: () => new Date("2026-09-24T12:00:00.000Z"),
+      onCycleComplete: () => { completions += 1; }
+    });
 
     const first = worker.processOnce();
     const second = worker.processOnce();
@@ -45,6 +49,7 @@ describe("CentralDispatchPollingWorker", () => {
     assert.equal(first, second);
     release?.();
     await Promise.all([first, second]);
+    assert.equal(completions, 1);
 
     await worker.processOnce();
     assert.equal(calls, 2);

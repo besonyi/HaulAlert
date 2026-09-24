@@ -53,6 +53,10 @@ export {
   CentralDispatchPollingWorker,
   type CentralDispatchPollingWorkerOptions
 } from "./central-dispatch-polling-worker.js";
+export {
+  CentralDispatchHealthReporter,
+  type CentralDispatchHealthLogger
+} from "./central-dispatch-health-reporter.js";
 
 export interface ProviderSearchConfiguration {
   readonly sessionId: string;
