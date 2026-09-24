@@ -55,6 +55,11 @@ export class MiniAppApiClient {
     return (await response.json() as { alert: MiniAppAlert }).alert;
   }
 
+  public async updateAlert(alertId: string, filter: CanonicalFilter): Promise<MiniAppAlert> {
+    const response = await this.send(`/v1/alerts/${alertId}`, "PUT", { filter });
+    return (await response.json() as { alert: MiniAppAlert }).alert;
+  }
+
   public async setStatus(alertId: string, status: AlertStatus): Promise<MiniAppAlert> {
     const response = await this.send(`/v1/alerts/${alertId}/${status === "active" ? "resume" : "pause"}`, "POST");
     return (await response.json() as { alert: MiniAppAlert }).alert;

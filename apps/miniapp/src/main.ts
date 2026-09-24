@@ -1,4 +1,4 @@
-import type { CanonicalFilter } from "@haulalert/canonical-filter";
+import type { CanonicalFilter, LocationConstraint } from "@haulalert/canonical-filter";
 
 import {
   MiniAppApiClient,
@@ -32,6 +32,7 @@ applyTelegramTheme(telegram);
 let alerts: readonly MiniAppAlert[] = [];
 let dashboard: MiniAppDashboard | undefined;
 let screen: "dashboard" | "create" = "dashboard";
+let editingAlert: MiniAppAlert | undefined;
 let message = telegram?.initData ? "" : "Open HaulAlert from Telegram to manage alerts.";
 const client = telegram?.initData ? new MiniAppApiClient(telegram.initData) : undefined;
 
@@ -52,7 +53,7 @@ function render(): void {
   app.innerHTML = `
     <section class="shell">
       <header class="topbar">
-        <div><p class="eyebrow">HAULALERT</p><h1>${screen === "dashboard" ? "Your alerts" : "New alert"}</h1></div>
+        <div><p class="eyebrow">HAULALERT</p><h1>${screen === "dashboard" ? "Your alerts" : editingAlert === undefined ? "New alert" : "Edit alert"}</h1></div>
         <div class="avatar">${escapeHtml(telegram?.initDataUnsafe?.user?.first_name?.slice(0, 1) ?? "H")}</div>
       </header>
       ${message ? `<p class="notice" role="status">${escapeHtml(message)}</p>` : ""}
@@ -96,41 +97,51 @@ function alertMarkup(alert: MiniAppAlert): string {
   return `<article class="alert-card ${alert.status === "paused" ? "paused" : ""}">
     <div class="card-heading"><div><h2>${escapeHtml(alert.name)}</h2><p>${escapeHtml(route)}</p></div><span class="status ${alert.status}">${alert.status === "active" ? "Active" : "Paused"}</span></div>
     <p class="details">${escapeHtml(detail)}</p>
-    <div class="card-actions"><button data-action="toggle" data-id="${alert.id}" data-status="${alert.status}">${pauseLabel}</button><button data-action="duplicate" data-id="${alert.id}">Copy</button><button class="danger" data-action="delete" data-id="${alert.id}">Delete</button></div>
+    <div class="card-actions"><button data-action="toggle" data-id="${alert.id}" data-status="${alert.status}">${pauseLabel}</button><button data-action="edit" data-id="${alert.id}">Edit</button><button data-action="duplicate" data-id="${alert.id}">Copy</button><button class="danger" data-action="delete" data-id="${alert.id}">Delete</button></div>
   </article>`;
 }
 
 function createMarkup(): string {
+  const filter = editingAlert?.filter;
+  const editing = editingAlert !== undefined;
   return `<form class="content form" id="alert-form">
-    <p class="form-intro">Tell us which loads to watch. You can refine locations and preferences later.</p>
-    <label>Alert name<input name="name" maxlength="80" placeholder="e.g. CA → AZ open loads" required /></label>
-    ${locationList("origin", "Origin")}
-    ${locationList("destination", "Destination")}
-    <div class="form-grid"><label>Trailer<select name="trailer"><option value="open">Open</option><option value="enclosed">Enclosed</option></select></label><label>Minimum pay<input name="minimumPay" type="number" min="0" step="50" placeholder="Any" /></label></div>
-    <div class="form-grid"><label>Min vehicles<input name="minimumVehicles" type="number" min="1" step="1" placeholder="Any" /></label><label>Max vehicles<input name="maximumVehicles" type="number" min="1" step="1" placeholder="Any" /></label></div>
-    <fieldset><legend>Load boards</legend><label class="check"><input type="checkbox" name="provider" value="central-dispatch" checked />Central Dispatch</label><label class="check"><input type="checkbox" name="provider" value="super-dispatch" checked />Super Dispatch</label><label class="check"><input type="checkbox" name="provider" value="shipcars" checked />Ship.Cars</label></fieldset>
-    <button class="primary submit" type="submit">Start monitoring</button>
+    <p class="form-intro">${editing ? "Update the route and monitoring choices for this alert." : "Tell us which loads to watch. You can refine locations and preferences later."}</p>
+    <label>Alert name<input name="name" maxlength="80" placeholder="e.g. CA → AZ open loads" value="${formValue(filter?.name)}" required /></label>
+    ${locationList("origin", "Origin", filter?.origins)}
+    ${locationList("destination", "Destination", filter?.destinations)}
+    <div class="form-grid"><label>Trailer<select name="trailer"><option value="open"${selected(filter?.trailerTypes.includes("open") ?? true)}>Open</option><option value="enclosed"${selected(filter?.trailerTypes.includes("enclosed") ?? false)}>Enclosed</option></select></label><label>Minimum pay<input name="minimumPay" type="number" min="0" step="50" placeholder="Any" value="${formValue(filter?.minimumPayUsd)}" /></label></div>
+    <div class="form-grid"><label>Min vehicles<input name="minimumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.minimum)}" /></label><label>Max vehicles<input name="maximumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.maximum)}" /></label></div>
+    <fieldset><legend>Load boards</legend><label class="check"><input type="checkbox" name="provider" value="central-dispatch"${checked(filter, "central-dispatch")} />Central Dispatch</label><label class="check"><input type="checkbox" name="provider" value="super-dispatch"${checked(filter, "super-dispatch")} />Super Dispatch</label><label class="check"><input type="checkbox" name="provider" value="shipcars"${checked(filter, "shipcars")} />Ship.Cars</label></fieldset>
+    <button class="primary submit" type="submit">${editing ? "Save changes" : "Start monitoring"}</button>
+    ${editing ? `<button class="secondary cancel" type="button" data-screen="dashboard">Cancel</button>` : ""}
   </form>`;
 }
 
-function locationList(role: "origin" | "destination", label: string): string {
+function locationList(role: "origin" | "destination", label: string, initialLocations: CanonicalFilter["origins"] | undefined): string {
+  const locations = initialLocations === undefined || initialLocations.length === 0 ? [undefined] : initialLocations;
   return `<div class="location-list" data-location-list="${role}">
-    ${locationFields(`${role}1`, label, role)}
+    ${locations.map((location, index) => locationFields(`${role}${index + 1}`, index === 0 ? label : `${label} ${index + 1}`, role, index > 0, location)).join("")}
     <button class="secondary" type="button" data-add-location="${role}">＋ Add another ${role}</button>
   </div>`;
 }
 
-function locationFields(prefix: string, label: string, role: "origin" | "destination", removable = false): string {
+function locationFields(prefix: string, label: string, role: "origin" | "destination", removable = false, initial?: LocationConstraint): string {
+  const kind = initial?.kind ?? "state";
+  const state = initial?.kind === "anywhere" || initial === undefined ? "" : initial.state;
+  const city = initial?.kind === "city" ? initial.city : "";
+  const latitude = initial?.kind === "city" ? initial.coordinates.latitude : "";
+  const longitude = initial?.kind === "city" ? initial.coordinates.longitude : "";
+  const radius = initial?.kind === "city" ? initial.radiusMiles : "";
   return `<fieldset class="location-group" data-location-group="${prefix}">
     <input type="hidden" name="${role}LocationPrefix" value="${prefix}" />
     <legend>${label}</legend>
     ${removable ? `<button class="remove-location" type="button" data-remove-location="${prefix}" aria-label="Remove ${label}">Remove</button>` : ""}
-    <label>Match location<select name="${prefix}Kind" data-location-kind="${prefix}"><option value="state" selected>State</option><option value="city">City + radius</option><option value="anywhere">Anywhere</option></select></label>
-    <div class="location-state-fields" data-location-required><label>${label} state <input name="${prefix}State" maxlength="2" placeholder="CA" autocapitalize="characters" /></label></div>
+    <label>Match location<select name="${prefix}Kind" data-location-kind="${prefix}"><option value="state"${selected(kind === "state")}>State</option><option value="city"${selected(kind === "city")}>City + radius</option><option value="anywhere"${selected(kind === "anywhere")}>Anywhere</option></select></label>
+    <div class="location-state-fields" data-location-required><label>${label} state <input name="${prefix}State" maxlength="2" placeholder="CA" autocapitalize="characters" value="${formValue(state)}" /></label></div>
     <div class="location-city-fields" data-city-fields hidden>
-      <label>${label} city <input name="${prefix}City" maxlength="80" placeholder="Los Angeles" /></label>
-      <div class="form-grid"><label>Radius (miles)<input name="${prefix}Radius" type="number" min="1" max="500" step="1" placeholder="75" /></label><label>${label} latitude<input name="${prefix}Latitude" type="number" min="-90" max="90" step="0.0001" placeholder="34.0522" /></label></div>
-      <label>${label} longitude<input name="${prefix}Longitude" type="number" min="-180" max="180" step="0.0001" placeholder="-118.2437" /></label>
+      <label>${label} city <input name="${prefix}City" maxlength="80" placeholder="Los Angeles" value="${formValue(city)}" /></label>
+      <div class="form-grid"><label>Radius (miles)<input name="${prefix}Radius" type="number" min="1" max="500" step="1" placeholder="75" value="${formValue(radius)}" /></label><label>${label} latitude<input name="${prefix}Latitude" type="number" min="-90" max="90" step="0.0001" placeholder="34.0522" value="${formValue(latitude)}" /></label></div>
+      <label>${label} longitude<input name="${prefix}Longitude" type="number" min="-180" max="180" step="0.0001" placeholder="-118.2437" value="${formValue(longitude)}" /></label>
       <p class="location-help">For a city radius, use the coordinates from your map app. This keeps the match exact.</p>
     </div>
   </fieldset>`;
@@ -138,7 +149,7 @@ function locationFields(prefix: string, label: string, role: "origin" | "destina
 
 function bindInteractions(): void {
   app.querySelectorAll<HTMLElement>("[data-screen]").forEach((element) => {
-    element.addEventListener("click", () => { screen = element.dataset.screen === "create" ? "create" : "dashboard"; message = ""; render(); });
+    element.addEventListener("click", () => { screen = element.dataset.screen === "create" ? "create" : "dashboard"; editingAlert = undefined; message = ""; render(); });
   });
   app.querySelector<HTMLFormElement>("#alert-form")?.addEventListener("submit", (event) => { void createAlert(event); });
   app.querySelectorAll<HTMLSelectElement>("[data-location-kind]").forEach((select) => {
@@ -188,10 +199,18 @@ async function createAlert(event: SubmitEvent): Promise<void> {
   const form = event.currentTarget;
   if (!(form instanceof HTMLFormElement)) return;
   try {
-    const alert = await client.createAlert(filterFromForm(form));
-    alerts = [alert, ...alerts];
+    const filter = filterFromForm(form);
+    if (editingAlert === undefined) {
+      const alert = await client.createAlert(filter);
+      alerts = [alert, ...alerts];
+      message = "Alert is active — we’ll message you when a matching load appears.";
+    } else {
+      const alert = await client.updateAlert(editingAlert.id, filter);
+      alerts = alerts.map((existing) => existing.id === alert.id ? alert : existing);
+      message = "Alert updated.";
+    }
+    editingAlert = undefined;
     screen = "dashboard";
-    message = "Alert is active — we’ll message you when a matching load appears.";
   } catch (error: unknown) {
     message = readableError(error);
   }
@@ -202,6 +221,13 @@ async function manageAlert(button: HTMLButtonElement): Promise<void> {
   if (client === undefined || button.dataset.id === undefined || button.dataset.action === undefined) return;
   const alertId = button.dataset.id;
   try {
+    if (button.dataset.action === "edit") {
+      const original = alerts.find((alert) => alert.id === alertId);
+      if (original === undefined) return;
+      editingAlert = original;
+      screen = "create";
+      message = "";
+    }
     if (button.dataset.action === "toggle") {
       const status = button.dataset.status === "active" ? "paused" : "active";
       const updated = await client.setStatus(alertId, status);
@@ -225,6 +251,18 @@ async function manageAlert(button: HTMLButtonElement): Promise<void> {
     message = readableError(error);
   }
   render();
+}
+
+function selected(value: boolean): string {
+  return value ? " selected" : "";
+}
+
+function checked(filter: CanonicalFilter | undefined, provider: CanonicalFilter["providers"][number]): string {
+  return filter === undefined || filter.providers.includes(provider) ? " checked" : "";
+}
+
+function formValue(value: string | number | null | undefined): string {
+  return value === null || value === undefined ? "" : escapeHtml(String(value));
 }
 
 function filterFromForm(form: HTMLFormElement): CanonicalFilter {
