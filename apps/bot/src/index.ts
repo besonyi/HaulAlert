@@ -42,26 +42,44 @@ export interface TelegramTextTransport {
   sendText(recipientId: string, text: string): Promise<void>;
 }
 
+export interface TelegramCallbackTransport {
+  answerCallbackQuery(callbackQueryId: string, text: string): Promise<void>;
+}
+
+export interface AlertMuteStore {
+  pauseForTelegramUser(input: { readonly telegramUserId: string; readonly alertId: string }): Promise<boolean>;
+}
+
 export interface TelegramUpdate {
   readonly message?: {
     readonly text?: string;
     readonly from?: { readonly id: string | number; readonly isBot?: boolean };
     readonly chat: { readonly id: string | number; readonly type: "private" | "group" | "supergroup" | "channel" };
   };
+  readonly callbackQuery?: {
+    readonly id: string;
+    readonly data?: string;
+    readonly from: { readonly id: string | number; readonly isBot?: boolean };
+    readonly chat: { readonly id: string | number; readonly type: "private" | "group" | "supergroup" | "channel" };
+  };
 }
 
 export type BotUpdateResult =
   | { readonly status: "ignored" }
-  | { readonly status: "onboarded"; readonly userId: string; readonly isNew: boolean };
+  | { readonly status: "onboarded"; readonly userId: string; readonly isNew: boolean }
+  | { readonly status: "muted" }
+  | { readonly status: "mute-unavailable" };
 
 /** Handles private /start messages without assuming a specific HTTP framework. */
 export class TelegramBotOnboardingService {
   public constructor(
     private readonly identities: TelegramIdentityStore,
-    private readonly transport: TelegramTextTransport
+    private readonly transport: TelegramTextTransport & Partial<TelegramCallbackTransport>,
+    private readonly alerts?: AlertMuteStore
   ) {}
 
   public async handle(update: TelegramUpdate): Promise<BotUpdateResult> {
+    if (update.callbackQuery !== undefined) return this.handleCallback(update.callbackQuery);
     const message = update.message;
     if (
       message === undefined
@@ -79,6 +97,47 @@ export class TelegramBotOnboardingService {
     await this.transport.sendText(telegramChatId, welcomeText(account.isNew));
     return { status: "onboarded", ...account };
   }
+
+  private async handleCallback(callback: NonNullable<TelegramUpdate["callbackQuery"]>): Promise<BotUpdateResult> {
+    const alertId = parseMuteCallback(callback.data);
+    if (
+      alertId === undefined
+      || callback.chat.type !== "private"
+      || callback.from.isBot === true
+      || this.alerts === undefined
+      || this.transport.answerCallbackQuery === undefined
+    ) return { status: "ignored" };
+
+    const muted = await this.alerts.pauseForTelegramUser({
+      telegramUserId: normalizeTelegramId(callback.from.id),
+      alertId
+    });
+    const text = muted ? "Alert paused. You will not receive new load messages for it." : "This alert is already paused or unavailable.";
+    await this.transport.answerCallbackQuery(callback.id, muted ? "Alert paused." : "Alert unavailable.");
+    await this.transport.sendText(normalizeTelegramId(callback.chat.id), text);
+    return muted ? { status: "muted" } : { status: "mute-unavailable" };
+  }
+}
+
+/** Changes only an alert owned by the Telegram identity that pressed the mute button. */
+export class PostgresAlertMuteStore implements AlertMuteStore {
+  public constructor(private readonly database: SqlExecutor) {}
+
+  public async pauseForTelegramUser(input: { readonly telegramUserId: string; readonly alertId: string }): Promise<boolean> {
+    const result = await this.database.query(
+      `UPDATE alerts AS alert
+      SET status = 'paused', updated_at = now()
+      FROM users
+      WHERE users.telegram_user_id = $1::bigint
+        AND alert.user_id = users.id
+        AND alert.id = $2::uuid
+        AND alert.status = 'active'
+        AND alert.deleted_at IS NULL
+      RETURNING alert.id`,
+      [input.telegramUserId, input.alertId]
+    );
+    return getRowId(result.rows[0]) !== undefined;
+  }
 }
 
 function getRowId(row: Record<string, unknown> | undefined): string | undefined {
@@ -93,6 +152,11 @@ function normalizeTelegramId(value: string | number): string {
   const normalized = String(value).trim();
   if (!/^-?\d+$/.test(normalized)) throw new Error("Telegram IDs must be integer values");
   return normalized;
+}
+
+function parseMuteCallback(value: string | undefined): string | undefined {
+  const alertId = value?.match(/^mute:([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i)?.[1];
+  return alertId;
 }
 
 function welcomeText(isNew: boolean): string {

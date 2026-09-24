@@ -86,7 +86,10 @@ export class PostgresNotificationWorker {
   ): Promise<void | Error> {
     try {
       const loadDetailsUrl = options.getLoadDetailsUrl?.(delivery);
-      const notificationOptions: NewLoadDeliveryOptions = loadDetailsUrl === undefined ? {} : { loadDetailsUrl };
+      const notificationOptions: NewLoadDeliveryOptions = {
+        muteAlertCallbackData: `mute:${delivery.match.alertId}`,
+        ...(loadDetailsUrl === undefined ? {} : { loadDetailsUrl })
+      };
       await this.transport.send({
         recipientId: delivery.match.telegramChatId,
         notification: renderNewLoadNotification(delivery.match, notificationOptions)

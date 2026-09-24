@@ -29,7 +29,8 @@ const match: AlertMatch = {
 describe("Telegram notification renderer", () => {
   it("renders the essential new-load details", () => {
     const notification = renderNewLoadNotification(match, {
-      loadDetailsUrl: "https://app.haulalert.example/loads/central-dispatch:829181"
+      loadDetailsUrl: "https://app.haulalert.example/loads/central-dispatch:829181",
+      muteAlertCallbackData: "mute:alert-1"
     });
 
     assert.match(notification.text, /Stockton, CA → Phoenix, AZ/);
@@ -39,6 +40,9 @@ describe("Telegram notification renderer", () => {
     assert.deepEqual(notification.actions, [{
       label: "OPEN LOAD",
       url: "https://app.haulalert.example/loads/central-dispatch:829181"
+    }, {
+      label: "MUTE ALERT",
+      callbackData: "mute:alert-1"
     }]);
   });
 });

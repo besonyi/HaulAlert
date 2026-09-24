@@ -46,7 +46,7 @@ export class TelegramBotApiTransport implements TelegramTransport {
             reply_markup: {
               inline_keyboard: [input.notification.actions.map((action) => ({
                 text: action.label,
-                url: action.url
+                ...("url" in action ? { url: action.url } : { callback_data: action.callbackData })
               }))]
             }
           })
@@ -63,9 +63,18 @@ export class TelegramBotApiTransport implements TelegramTransport {
     });
   }
 
+  /** Acknowledges a pressed inline control so Telegram stops showing its loading indicator. */
+  public async answerCallbackQuery(callbackQueryId: string, text: string): Promise<void> {
+    await this.callTelegram("answerCallbackQuery", { callback_query_id: callbackQueryId, text });
+  }
+
   private async sendMessage(body: Record<string, unknown>): Promise<void> {
+    await this.callTelegram("sendMessage", body);
+  }
+
+  private async callTelegram(method: "sendMessage" | "answerCallbackQuery", body: Record<string, unknown>): Promise<void> {
     const response = await this.fetchImplementation(
-      `https://api.telegram.org/bot${this.botToken}/sendMessage`,
+      `https://api.telegram.org/bot${this.botToken}/${method}`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },

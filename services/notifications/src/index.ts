@@ -49,6 +49,7 @@ export type DeliveryResult =
 
 export interface NewLoadDeliveryOptions {
   readonly loadDetailsUrl?: string;
+  readonly muteAlertCallbackData?: string;
 }
 
 /** Delivers each matching new load at most once per user and alert. */

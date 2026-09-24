@@ -1,9 +1,14 @@
 import type { AlertMatch } from "@haulalert/alert-matcher";
 
-export interface TelegramAction {
+export type TelegramAction =
+  | {
   readonly label: string;
   readonly url: string;
-}
+  }
+  | {
+    readonly label: string;
+    readonly callbackData: string;
+  };
 
 export interface NewLoadNotification {
   readonly text: string;
@@ -13,7 +18,7 @@ export interface NewLoadNotification {
 /** Renders the customer-facing Telegram payload without exposing provider sessions. */
 export function renderNewLoadNotification(
   match: AlertMatch,
-  options: { readonly loadDetailsUrl?: string } = {}
+  options: { readonly loadDetailsUrl?: string; readonly muteAlertCallbackData?: string } = {}
 ): NewLoadNotification {
   const { load } = match;
   const lines = [
@@ -31,9 +36,13 @@ export function renderNewLoadNotification(
 
   lines.push(`📡 Source: ${providerDisplayName(load.provider)}`);
 
+  const actions: TelegramAction[] = [];
+  if (options.loadDetailsUrl !== undefined) actions.push({ label: "OPEN LOAD", url: options.loadDetailsUrl });
+  if (options.muteAlertCallbackData !== undefined) actions.push({ label: "MUTE ALERT", callbackData: options.muteAlertCallbackData });
+
   return {
     text: lines.join("\n"),
-    actions: options.loadDetailsUrl === undefined ? [] : [{ label: "OPEN LOAD", url: options.loadDetailsUrl }]
+    actions
   };
 }
 

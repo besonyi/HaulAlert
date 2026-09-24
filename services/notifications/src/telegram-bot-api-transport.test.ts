@@ -46,6 +46,36 @@ describe("Telegram Bot API transport", () => {
     );
   });
 
+  it("sends a mute action as Telegram callback data", async () => {
+    let request: Request | undefined;
+    const transport = new TelegramBotApiTransport("test-token", async (input, init) => {
+      request = new Request(input, init);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    await transport.send({
+      recipientId: "12345",
+      notification: { text: "🚨 NEW LOAD", actions: [{ label: "MUTE ALERT", callbackData: "mute:alert-1" }] }
+    });
+
+    assert.deepEqual((await request?.json() as { reply_markup: unknown }).reply_markup, {
+      inline_keyboard: [[{ text: "MUTE ALERT", callback_data: "mute:alert-1" }]]
+    });
+  });
+
+  it("acknowledges an inline callback", async () => {
+    let request: Request | undefined;
+    const transport = new TelegramBotApiTransport("test-token", async (input, init) => {
+      request = new Request(input, init);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    await transport.answerCallbackQuery("callback-1", "Alert paused.");
+
+    assert.equal(request?.url, "https://api.telegram.org/bottest-token/answerCallbackQuery");
+    assert.deepEqual(await request?.json(), { callback_query_id: "callback-1", text: "Alert paused." });
+  });
+
   it("turns Telegram's retry-after response into a typed rate-limit error", async () => {
     const transport = new TelegramBotApiTransport("test-token", async () => (
       new Response(JSON.stringify({

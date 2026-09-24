@@ -74,12 +74,13 @@ describe("PostgreSQL notification worker", () => {
 
   it("sends a claimed delivery and marks it sent", async () => {
     const repository = new FakeRepository([claimedDelivery]);
-    const recipients: string[] = [];
-    const transport: TelegramTransport = { send: async ({ recipientId }) => { recipients.push(recipientId); } };
+    const sent: Parameters<TelegramTransport["send"]>[0][] = [];
+    const transport: TelegramTransport = { send: async (input) => { sent.push(input); } };
     const worker = new PostgresNotificationWorker(repository, transport);
 
     assert.deepEqual(await worker.processBatch(10, { now }), [{ status: "sent", deliveryId: "delivery-1" }]);
-    assert.deepEqual(recipients, ["telegram-1"]);
+    assert.deepEqual(sent[0]?.recipientId, "telegram-1");
+    assert.deepEqual(sent[0]?.notification.actions, [{ label: "MUTE ALERT", callbackData: "mute:alert-1" }]);
     assert.deepEqual(repository.markedSent, ["delivery-1"]);
     assert.deepEqual(repository.leaseRecoveryCalls, [{ leaseDurationMs: 300_000, maximumAttempts: 3, now }]);
   });

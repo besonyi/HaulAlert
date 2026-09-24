@@ -37,6 +37,32 @@ describe("Telegram webhook handler", () => {
     }]);
   });
 
+  it("passes an authenticated mute callback to the Bot handler", async () => {
+    const updates: unknown[] = [];
+    const handler = new TelegramWebhookHandler(secret, { handle: async (update) => { updates.push(update); } });
+
+    assert.deepEqual(await handler.handle({
+      method: "POST",
+      headers: { "x-telegram-bot-api-secret-token": secret },
+      body: JSON.stringify({
+        callback_query: {
+          id: "callback-1",
+          data: "mute:123e4567-e89b-42d3-a456-426614174000",
+          from: { id: 12345, is_bot: false },
+          message: { chat: { id: 12345, type: "private" } }
+        }
+      })
+    }), { statusCode: 200 });
+    assert.deepEqual(updates, [{
+      callbackQuery: {
+        id: "callback-1",
+        data: "mute:123e4567-e89b-42d3-a456-426614174000",
+        from: { id: 12345, isBot: false },
+        chat: { id: 12345, type: "private" }
+      }
+    }]);
+  });
+
   it("rejects requests with a missing or invalid secret before handling them", async () => {
     let handled = false;
     const updates: TelegramUpdateHandler = { handle: async () => { handled = true; } };

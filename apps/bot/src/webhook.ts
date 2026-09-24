@@ -60,6 +60,7 @@ function hasValidSecret(provided: string | undefined, expected: string): boolean
 
 function parseTelegramUpdate(value: unknown): TelegramUpdate | undefined {
   if (!isRecord(value)) return undefined;
+  if (value.callback_query !== undefined) return parseCallbackQuery(value.callback_query);
   if (value.message === undefined) return {};
   if (!isRecord(value.message) || !isRecord(value.message.chat)) return undefined;
 
@@ -79,6 +80,24 @@ function parseTelegramUpdate(value: unknown): TelegramUpdate | undefined {
               ...(typeof from.is_bot === "boolean" ? { isBot: from.is_bot } : {})
             }
           }),
+      chat: { id: chat.id as string | number, type: chat.type }
+    }
+  };
+}
+
+function parseCallbackQuery(value: unknown): TelegramUpdate | undefined {
+  if (!isRecord(value) || typeof value.id !== "string" || !isRecord(value.from) || !isTelegramId(value.from.id)) return undefined;
+  if (!isRecord(value.message) || !isRecord(value.message.chat)) return undefined;
+  const chat = value.message.chat;
+  if (!isTelegramId(chat.id) || !isChatType(chat.type) || (value.data !== undefined && typeof value.data !== "string")) return undefined;
+  return {
+    callbackQuery: {
+      id: value.id,
+      ...(value.data === undefined ? {} : { data: value.data }),
+      from: {
+        id: value.from.id as string | number,
+        ...(typeof value.from.is_bot === "boolean" ? { isBot: value.from.is_bot } : {})
+      },
       chat: { id: chat.id as string | number, type: chat.type }
     }
   };

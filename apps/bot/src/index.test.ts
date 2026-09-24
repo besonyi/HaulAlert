@@ -6,6 +6,7 @@ import type { SqlExecutor } from "@haulalert/notification-service";
 import {
   PostgresTelegramIdentityStore,
   TelegramBotOnboardingService,
+  PostgresAlertMuteStore,
   type TelegramIdentityStore,
   type TelegramTextTransport
 } from "./index.js";
@@ -60,5 +61,37 @@ describe("Telegram Bot onboarding", () => {
     });
     assert.match(statements[0] ?? "", /ON CONFLICT/);
     assert.match(statements[1] ?? "", /UPDATE users/);
+  });
+
+  it("pauses only the alert owned by the Telegram user who pressed mute", async () => {
+    const calls: Array<readonly unknown[]> = [];
+    const database: SqlExecutor = {
+      query: async (_statement, values) => {
+        calls.push(values ?? []);
+        return { rows: [{ id: "alert-1" }] };
+      }
+    };
+    const acknowledgements: string[] = [];
+    const texts: string[] = [];
+    const service = new TelegramBotOnboardingService(
+      { upsert: async () => ({ userId: "user-1", isNew: false }) },
+      {
+        sendText: async (_recipient, text) => { texts.push(text); },
+        answerCallbackQuery: async (_id, text) => { acknowledgements.push(text); }
+      },
+      new PostgresAlertMuteStore(database)
+    );
+
+    assert.deepEqual(await service.handle({
+      callbackQuery: {
+        id: "callback-1",
+        data: "mute:123e4567-e89b-42d3-a456-426614174000",
+        from: { id: 12345 },
+        chat: { id: 12345, type: "private" }
+      }
+    }), { status: "muted" });
+    assert.deepEqual(calls, [["12345", "123e4567-e89b-42d3-a456-426614174000"]]);
+    assert.deepEqual(acknowledgements, ["Alert paused."]);
+    assert.match(texts[0] ?? "", /Alert paused/);
   });
 });

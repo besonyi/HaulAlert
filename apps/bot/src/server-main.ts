@@ -11,7 +11,7 @@ import {
   TelegramBotApiTransport
 } from "@haulalert/notification-service";
 
-import { PostgresTelegramIdentityStore, TelegramBotOnboardingService } from "./index.js";
+import { PostgresAlertMuteStore, PostgresTelegramIdentityStore, TelegramBotOnboardingService } from "./index.js";
 import {
   getTelegramWebhookSecret,
   TelegramWebhookHandler,
@@ -61,9 +61,11 @@ export function createTelegramWebhookServer(
 /** Runs the Telegram Bot webhook server until SIGINT or SIGTERM. */
 export async function runBotServer(config: BotServerConfig = getBotServerConfig()): Promise<void> {
   const pool = new Pool({ connectionString: config.databaseUrl });
+  const database = new PgPoolSqlExecutor(pool);
   const onboarding = new TelegramBotOnboardingService(
-    new PostgresTelegramIdentityStore(new PgPoolSqlExecutor(pool)),
-    new TelegramBotApiTransport(config.telegramBotToken)
+    new PostgresTelegramIdentityStore(database),
+    new TelegramBotApiTransport(config.telegramBotToken),
+    new PostgresAlertMuteStore(database)
   );
   const server = createTelegramWebhookServer(
     new TelegramWebhookHandler(config.webhookSecret, onboarding),
