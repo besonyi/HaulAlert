@@ -148,6 +148,13 @@ export class BrowserRuntime {
     return [...this.tabs.values()].filter((tab) => provider === undefined || tab.provider === provider);
   }
 
+  /** Tabs that may be scanned now without using a degraded browser session. */
+  public listScannableTabs(provider?: SupportedProvider): readonly PersistentSearchTab[] {
+    return this.listTabs(provider).filter((tab) => (
+      tab.status === "ready" && this.sessions.get(tab.sessionId)?.status === "healthy"
+    ));
+  }
+
   private pickHealthySession(provider: SupportedProvider): BrowserSession {
     const candidates = this.listSessions(provider)
       .filter((session) => session.status === "healthy")
@@ -196,3 +203,5 @@ export class BrowserRuntime {
     return this.now().toISOString();
   }
 }
+
+export { ScanScheduler, type ScanOutcome, type ScanSchedulePolicy, type ScheduledScan } from "./scan-scheduler.js";

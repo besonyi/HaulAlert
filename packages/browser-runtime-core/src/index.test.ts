@@ -60,4 +60,17 @@ describe("browser runtime", () => {
       NoHealthySessionError
     );
   });
+
+  it("returns only ready tabs belonging to healthy sessions for scanning", () => {
+    const runtime = createRuntime();
+    runtime.registerSession({ id: "central-1", provider: "central-dispatch" });
+    runtime.registerSession({ id: "central-2", provider: "central-dispatch" });
+    const healthy = runtime.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "hash-a" });
+    const unhealthy = runtime.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "hash-b" });
+    runtime.markTabReady(healthy.tab.id);
+    runtime.markTabReady(unhealthy.tab.id);
+    runtime.setSessionStatus(unhealthy.tab.sessionId, "expired");
+
+    assert.deepEqual(runtime.listScannableTabs().map(({ id }) => id), [healthy.tab.id]);
+  });
 });
