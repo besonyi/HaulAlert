@@ -2,9 +2,59 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  buildCentralDispatchOpenSearchRequest,
   normalizeCentralDispatchListing,
   normalizeCentralDispatchSearchResponse
 } from "./index.js";
+
+describe("Central Dispatch authenticated search request", () => {
+  it("maps provider-native filter fields without adding browser credentials", () => {
+    const request = buildCentralDispatchOpenSearchRequest({
+      origins: [{
+        kind: "city",
+        city: "Phoenix",
+        state: "AZ",
+        coordinates: { latitude: 33.4484, longitude: -112.074 },
+        radiusMiles: 75
+      }],
+      destinations: [{ kind: "state", state: "CA" }],
+      trailerTypes: ["open", "enclosed"],
+      vehicles: { minimum: 2, maximum: 7 },
+      readiness: { kind: "date-range", availableFrom: "2026-09-24", availableUntil: "2026-09-26" },
+      minimumPayUsd: 1500,
+      minimumRatePerMile: 1.75
+    }, { now: new Date("2026-09-24T12:00:00.000Z") });
+
+    assert.deepEqual(request, {
+      method: "POST",
+      url: "https://bff.centraldispatch.com/listing-search/api/open-search",
+      body: {
+        vehicleCount: { min: 2, max: 7 },
+        trailerTypes: ["OPEN", "ENCLOSED"],
+        readyToShipWithinDays: 2,
+        minimumPaymentTotal: 1500,
+        minimumPricePerMile: 1.75,
+        offset: 0,
+        limit: 250,
+        sortFields: [
+          { name: "POSTDATE", direction: "DESC" },
+          { name: "PRICE", direction: "DESC" }
+        ],
+        shipperIds: [],
+        marketplaceIds: [],
+        requestType: "Open",
+        locations: [
+          { city: "Phoenix", state: "AZ", radius: 75, scope: "Pickup", id: "pickup:phoenix, az" },
+          { state: "CA", scope: "Dropoff", id: "Dropoff:CA" }
+        ]
+      }
+    });
+  });
+
+  it("refuses a page size outside the supported provider window", () => {
+    assert.throws(() => buildCentralDispatchOpenSearchRequest({}, { limit: 251 }), /1 through 250/);
+  });
+});
 
 describe("Central Dispatch response normalizer", () => {
   it("maps a session-search listing into the normalized provider-neutral load", () => {

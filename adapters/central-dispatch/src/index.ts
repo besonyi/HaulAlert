@@ -5,6 +5,7 @@ import {
   type TrailerType
 } from "@haulalert/load-model";
 import type { ProviderFilterCapabilities } from "@haulalert/filter-compiler";
+import type { SourceFilter } from "@haulalert/filter-compiler";
 
 /** Native-search capabilities verified against the session-backed Central flow. */
 export const centralDispatchCapabilities: ProviderFilterCapabilities = {
@@ -22,6 +23,84 @@ export const centralDispatchCapabilities: ProviderFilterCapabilities = {
 };
 
 const centralDispatchSearchUrl = "https://app.centraldispatch.com/search";
+
+/** The authenticated marketplace endpoint used by Central Dispatch's Load Board. */
+export const centralDispatchOpenSearchUrl = "https://bff.centraldispatch.com/listing-search/api/open-search";
+
+export interface CentralDispatchOpenSearchRequest {
+  readonly method: "POST";
+  readonly url: typeof centralDispatchOpenSearchUrl;
+  readonly body: CentralDispatchOpenSearchBody;
+}
+
+export interface CentralDispatchOpenSearchBody {
+  readonly vehicleCount: { readonly min: number; readonly max: number | null };
+  readonly trailerTypes: readonly ("OPEN" | "ENCLOSED")[];
+  readonly readyToShipWithinDays: number | null;
+  readonly minimumPaymentTotal: number | null;
+  readonly minimumPricePerMile: number | null;
+  readonly offset: 0;
+  readonly limit: number;
+  readonly sortFields: readonly {
+    readonly name: "POSTDATE" | "PRICE";
+    readonly direction: "ASC" | "DESC";
+  }[];
+  readonly shipperIds: readonly [];
+  readonly marketplaceIds: readonly [];
+  readonly requestType: "Open";
+  readonly locations: readonly CentralDispatchSearchLocation[];
+}
+
+export interface CentralDispatchSearchLocation {
+  readonly city?: string;
+  readonly state?: string;
+  readonly radius?: number;
+  readonly scope: "Pickup" | "Dropoff";
+  readonly id: string;
+}
+
+/**
+ * Produces the marketplace request to be executed by an authenticated browser
+ * transport. The request contains filter data only; browser credentials remain
+ * entirely with the browser implementation.
+ */
+export function buildCentralDispatchOpenSearchRequest(
+  filter: SourceFilter,
+  options: { readonly limit?: number; readonly now?: Date } = {}
+): CentralDispatchOpenSearchRequest {
+  const limit = options.limit ?? 250;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 250) {
+    throw new Error("Central Dispatch search limit must be an integer from 1 through 250");
+  }
+
+  return {
+    method: "POST",
+    url: centralDispatchOpenSearchUrl,
+    body: {
+      vehicleCount: {
+        min: filter.vehicles?.minimum ?? 1,
+        max: filter.vehicles?.maximum ?? null
+      },
+      trailerTypes: toCentralTrailerTypes(filter.trailerTypes),
+      readyToShipWithinDays: toCentralReadyDays(filter.readiness, options.now ?? new Date()),
+      minimumPaymentTotal: filter.minimumPayUsd ?? null,
+      minimumPricePerMile: filter.minimumRatePerMile ?? null,
+      offset: 0,
+      limit,
+      sortFields: [
+        { name: "POSTDATE", direction: "DESC" },
+        { name: "PRICE", direction: "DESC" }
+      ],
+      shipperIds: [],
+      marketplaceIds: [],
+      requestType: "Open",
+      locations: [
+        ...toCentralLocations(filter.origins, "Pickup"),
+        ...toCentralLocations(filter.destinations, "Dropoff")
+      ]
+    }
+  };
+}
 
 /**
  * Converts a Central Dispatch session-search response into HaulAlert's
@@ -152,6 +231,42 @@ function toIsoDate(value: unknown): string | null {
   if (typeof value !== "string" || value.trim().length === 0) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function toCentralTrailerTypes(value: SourceFilter["trailerTypes"]): readonly ("OPEN" | "ENCLOSED")[] {
+  return value === undefined
+    ? []
+    : [...new Set(value.map((trailer) => trailer === "enclosed" ? "ENCLOSED" : "OPEN"))];
+}
+
+function toCentralReadyDays(value: SourceFilter["readiness"], now: Date): number | null {
+  if (value === undefined || value.kind === "any") return null;
+  if (value.kind === "today") return 0;
+  if (value.kind === "tomorrow") return 1;
+
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const availableUntil = Date.parse(`${value.availableUntil}T00:00:00.000Z`);
+  const differenceInDays = Math.floor((availableUntil - today) / 86_400_000);
+  return Math.max(0, differenceInDays);
+}
+
+function toCentralLocations(
+  values: SourceFilter["origins"] | SourceFilter["destinations"],
+  scope: CentralDispatchSearchLocation["scope"]
+): readonly CentralDispatchSearchLocation[] {
+  return (values ?? []).flatMap((location) => {
+    if (location.kind === "anywhere") return [];
+    if (location.kind === "state") {
+      return [{ state: location.state, scope, id: `${scope}:${location.state}` }];
+    }
+    return [{
+      city: location.city,
+      state: location.state,
+      radius: location.radiusMiles,
+      scope,
+      id: `${scope}:${location.city}, ${location.state}`.toLowerCase()
+    }];
+  });
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

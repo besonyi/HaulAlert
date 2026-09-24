@@ -19,6 +19,10 @@ export {
   CentralDispatchStaleSearchError,
   type CentralDispatchSessionTransport
 } from "./central-dispatch-session-client.js";
+export {
+  CentralDispatchOpenSearchTransport,
+  type AuthenticatedCentralDispatchRequestExecutor
+} from "./central-dispatch-open-search-transport.js";
 
 export interface ProviderSearchConfiguration {
   readonly sessionId: string;
