@@ -290,6 +290,12 @@ importers:
       '@haulalert/filter-compiler':
         specifier: workspace:*
         version: link:../../packages/filter-compiler
+      '@haulalert/load-model':
+        specifier: workspace:*
+        version: link:../../packages/load-model
+      '@haulalert/new-load-detector':
+        specifier: workspace:*
+        version: link:../../packages/new-load-detector
 
   services/ingestion:
     dependencies:

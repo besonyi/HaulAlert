@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { BrowserRuntime } from "@haulalert/browser-runtime-core";
+import { BrowserRuntime, ScanScheduler } from "@haulalert/browser-runtime-core";
 import type { CompiledProviderFilter } from "@haulalert/filter-compiler";
+import type { NormalizedLoad } from "@haulalert/load-model";
 
-import { BrowserRuntimeOrchestrator, type ProviderSearchDriver } from "./index.js";
+import {
+  BrowserRuntimeOrchestrator,
+  BrowserScanCoordinator,
+  type ProviderSearchDriver,
+  type ProviderSearchScanner,
+  type ScanProcessor
+} from "./index.js";
 
 const compiledFilter: CompiledProviderFilter = {
   provider: "central-dispatch",
@@ -13,9 +20,9 @@ const compiledFilter: CompiledProviderFilter = {
   sourceFilterHash: "source-hash"
 };
 
-function createRuntime(): BrowserRuntime {
+function createRuntime(now: () => Date = () => new Date()): BrowserRuntime {
   let tabNumber = 0;
-  const runtime = new BrowserRuntime({ createTabId: () => `tab-${++tabNumber}` });
+  const runtime = new BrowserRuntime({ now, createTabId: () => `tab-${++tabNumber}` });
   runtime.registerSession({ id: "central-1", provider: "central-dispatch" });
   return runtime;
 }
@@ -51,5 +58,60 @@ describe("browser runtime orchestrator", () => {
 
     await assert.rejects(() => orchestrator.activateSearch(compiledFilter), /Provider page did not load/);
     assert.equal(runtime.listTabs()[0]?.status, "closed");
+  });
+});
+
+describe("browser scan coordinator", () => {
+  it("processes a due healthy tab and preserves its scan scheduling outcome", async () => {
+    const scanAt = new Date("2026-09-23T12:00:00.000Z");
+    const runtime = createRuntime(() => scanAt);
+    const reservation = runtime.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "source-hash" });
+    runtime.markTabReady(reservation.tab.id);
+    const scanner: ProviderSearchScanner = {
+      scan: async () => ({ searchId: "central-dispatch:source-hash", loads: [], isTruncated: false })
+    };
+    const processor: ScanProcessor = {
+      process: async () => ({ scan: { newLoads: [], seeded: true, boundaryFound: false, overflowRisk: false } })
+    };
+    const coordinator = new BrowserScanCoordinator(runtime, new ScanScheduler(), scanner, processor);
+
+    const outcomes = await coordinator.processDue(1, scanAt);
+
+    assert.deepEqual(outcomes.map(({ status }) => status), ["processed"]);
+    assert.equal(outcomes[0]?.status === "processed" && outcomes[0].tab.lastScanAt, scanAt.toISOString());
+  });
+
+  it("degrades a tab when a provider returns rows with the wrong identity", async () => {
+    const scanAt = new Date("2026-09-23T12:00:00.000Z");
+    const runtime = createRuntime(() => scanAt);
+    const reservation = runtime.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "source-hash" });
+    runtime.markTabReady(reservation.tab.id);
+    const foreignLoad: NormalizedLoad = {
+      provider: "shipcars",
+      providerLoadId: "foreign-1",
+      pickup: { city: null, state: null, postalCode: null, coordinates: null },
+      delivery: { city: null, state: null, postalCode: null, coordinates: null },
+      vehicleCount: 1,
+      trailerType: "open",
+      payUsd: null,
+      distanceMiles: null,
+      ratePerMile: null,
+      readyAt: null,
+      postedAt: null,
+      sourceUrl: null,
+      broker: null
+    };
+    const scanner: ProviderSearchScanner = {
+      scan: async () => ({ searchId: "central-dispatch:source-hash", loads: [foreignLoad], isTruncated: false })
+    };
+    const processor: ScanProcessor = {
+      process: async () => { throw new Error("should not process a foreign load"); }
+    };
+    const coordinator = new BrowserScanCoordinator(runtime, new ScanScheduler(), scanner, processor);
+
+    const outcomes = await coordinator.processDue(1, scanAt);
+
+    assert.equal(outcomes[0]?.status, "failed");
+    assert.equal(runtime.listTabs()[0]?.status, "degraded");
   });
 });
