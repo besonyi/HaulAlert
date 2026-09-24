@@ -25,6 +25,26 @@ describe("browser runtime", () => {
     assert.equal(second.tab.id, first.tab.id);
   });
 
+  it("re-provisions a degraded tab instead of allocating another one", () => {
+    const runtime = createRuntime();
+    runtime.registerSession({ id: "central-1", provider: "central-dispatch" });
+
+    const first = runtime.reserveSearchTab({
+      provider: "central-dispatch",
+      sourceFilterHash: "hash-a",
+      providerSearchId: "11111111-1111-4111-8111-111111111111"
+    });
+    runtime.markTabReady(first.tab.id);
+    runtime.markTabDegraded(first.tab.id);
+    const recovery = runtime.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "hash-a" });
+
+    assert.equal(recovery.reused, false);
+    assert.equal(recovery.tab.id, first.tab.id);
+    assert.equal(recovery.tab.providerSearchId, first.tab.providerSearchId);
+    assert.equal(recovery.tab.status, "provisioning");
+    assert.equal(runtime.listTabs().length, 1);
+  });
+
   it("balances new tabs across healthy sessions", () => {
     const runtime = createRuntime();
     runtime.registerSession({ id: "central-1", provider: "central-dispatch" });

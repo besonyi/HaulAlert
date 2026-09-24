@@ -140,6 +140,21 @@ export class BrowserRuntime {
       return { tab: reusableTab, reused: true };
     }
 
+    // A scan failure can temporarily degrade a tab while its browser session is
+    // still healthy. Re-provision that same durable provider search instead of
+    // allocating a new tab on every recovery cycle.
+    const recoverableTab = [...this.tabs.values()].find((tab) => {
+      const session = this.sessions.get(tab.sessionId);
+      return tab.provider === input.provider
+        && tab.sourceFilterHash === input.sourceFilterHash
+        && tab.status === "degraded"
+        && session?.status === "healthy";
+    });
+
+    if (recoverableTab !== undefined) {
+      return { tab: this.updateTab(recoverableTab.id, { status: "provisioning" }), reused: false };
+    }
+
     const session = this.pickHealthySession(input.provider);
     const tab: PersistentSearchTab = {
       id: this.createTabId(),
