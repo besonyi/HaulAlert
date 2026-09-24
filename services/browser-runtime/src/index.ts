@@ -37,6 +37,10 @@ export {
   type ChromeDevToolsRuntime,
   type ChromeDevToolsTarget
 } from "./central-dispatch-cdp-executor.js";
+export {
+  CentralDispatchSessionMonitor,
+  type CentralDispatchSessionProbeResult
+} from "./central-dispatch-session-monitor.js";
 
 export interface ProviderSearchConfiguration {
   readonly sessionId: string;
