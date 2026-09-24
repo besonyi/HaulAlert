@@ -122,4 +122,31 @@ export class ScanIngestionProcessor {
   ): Promise<ScannedIngestionResult> {
     return this.process(await collector.collect(target), now);
   }
+
+  /**
+   * Processes a scan and records its detection evidence. Ingestion remains the
+   * source of truth if telemetry fails, so callers can surface the error without
+   * replaying a successfully persisted load window.
+   */
+  public async processCompletedScan(
+    completedScan: import("./postgres-scan-history.js").CompletedProviderScan,
+    history: import("./postgres-scan-history.js").ScanHistoryRecorder
+  ): Promise<ScannedIngestionResult & { readonly historyError?: Error }> {
+    const processed = await this.process(completedScan.scan, completedScan.completedAt);
+    try {
+      await history.record(completedScan, processed.scan);
+      return processed;
+    } catch (cause) {
+      return {
+        ...processed,
+        historyError: cause instanceof Error ? cause : new Error("Unknown scan history recording failure")
+      };
+    }
+  }
 }
+
+export {
+  PostgresScanHistoryRecorder,
+  type CompletedProviderScan,
+  type ScanHistoryRecorder
+} from "./postgres-scan-history.js";

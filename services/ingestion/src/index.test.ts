@@ -9,6 +9,7 @@ import type { DurableNotificationDeliveryEnqueuer, SqlExecutor } from "@haulaler
 
 import {
   DurableLoadIngestionService,
+  type ScanHistoryRecorder,
   PostgresLoadRepository,
   ScanIngestionProcessor,
   type LoadPersistence
@@ -135,5 +136,26 @@ describe("durable load ingestion", () => {
     assert.deepEqual(seeded.ingestions, []);
     assert.deepEqual(detected.scan.newLoads.map(({ providerLoadId }) => providerLoadId), ["newer-829182"]);
     assert.deepEqual(recordedLoadIds, ["newer-829182"]);
+  });
+
+  it("does not replay durable ingestion when scan history recording fails", async () => {
+    const persistence: LoadPersistence = { record: async () => ({ isNew: true }) };
+    const deliveries: DurableNotificationDeliveryEnqueuer = {
+      enqueue: async () => ({ status: "queued", deliveryId: "delivery-1", deliveryKey: "key-1" })
+    };
+    const processor = new ScanIngestionProcessor(
+      new NewLoadDetector(new InMemorySeenLoadStore()),
+      new DurableLoadIngestionService(persistence, new AlertCandidateIndex(), deliveries)
+    );
+    const history: ScanHistoryRecorder = { record: async () => { throw new Error("database unavailable"); } };
+    const result = await processor.processCompletedScan({
+      providerSearchId: "11111111-1111-4111-8111-111111111111",
+      scan: { searchId: "central:hash", loads: [load], isTruncated: false },
+      startedAt: new Date("2026-09-23T12:00:00.000Z"),
+      completedAt: new Date("2026-09-23T12:00:01.000Z")
+    }, history);
+
+    assert.equal(result.scan.seeded, true);
+    assert.equal(result.historyError?.message, "database unavailable");
   });
 });
