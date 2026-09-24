@@ -12,6 +12,8 @@ const maximumRequestBodyBytes = 1_000_000;
 export interface MiniAppApiDependencies {
   readonly alerts: AlertManagementRepository;
   readonly dashboard: DashboardRepository;
+  readonly adminDashboard?: { getOverview(): Promise<unknown> };
+  readonly isAdmin?: (telegramUserId: string) => boolean;
   readonly authenticate: (initData: string) => AuthenticatedTelegramUser;
 }
 
@@ -41,6 +43,12 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
   }
 
   try {
+    if (pathname === "/v1/admin/overview" && request.method === "GET") {
+      if (dependencies.adminDashboard === undefined || dependencies.isAdmin === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      return dependencies.isAdmin(user.id)
+        ? { statusCode: 200, body: { overview: await dependencies.adminDashboard.getOverview() } }
+        : { statusCode: 403, body: { error: "forbidden" } };
+    }
     if (pathname === "/v1/dashboard" && request.method === "GET") {
       return { statusCode: 200, body: { dashboard: await dependencies.dashboard.getForUser(user.id) } };
     }

@@ -6,20 +6,22 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { PostgresAlertRepository, PostgresDashboardRepository } from "./index.js";
+import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAlertRepository, PostgresDashboardRepository } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
   readonly databaseUrl: string;
   readonly telegramBotToken: string;
   readonly port: number;
+  readonly adminTelegramUserIds: readonly string[];
 }
 
 export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env): ApiServerConfig {
   return {
     databaseUrl: getDatabaseUrl(environment),
     telegramBotToken: getTelegramBotToken(environment),
-    port: getPort(environment.API_PORT)
+    port: getPort(environment.API_PORT),
+    adminTelegramUserIds: getAdminTelegramUserIds(environment.ADMIN_TELEGRAM_USER_IDS)
   };
 }
 
@@ -30,6 +32,8 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
   const server = createMiniAppApiServer({
     alerts: new PostgresAlertRepository(database),
     dashboard: new PostgresDashboardRepository(database),
+    adminDashboard: new PostgresAdminDashboardRepository(database),
+    isAdmin: (telegramUserId) => isAdminTelegramUser(telegramUserId, config.adminTelegramUserIds),
     authenticate: (initData) => verifyTelegramMiniAppInitData(initData, config.telegramBotToken)
   });
 
