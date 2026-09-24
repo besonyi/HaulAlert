@@ -24,9 +24,11 @@ export class DurableBrowserRuntimeController {
     filter: CompiledProviderFilter,
     providerSearchId?: string
   ): Promise<ActivatedSearch> {
-    const activated = await orchestrator.activateSearch(filter, providerSearchId);
-    await this.store.save(this.runtime.snapshot());
-    return activated;
+    try {
+      return await orchestrator.activateSearch(filter, providerSearchId);
+    } finally {
+      await this.store.save(this.runtime.snapshot());
+    }
   }
 
   public async processDue(
