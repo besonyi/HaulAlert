@@ -15,7 +15,8 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "node --test dist/*.test.js"
+    "test": "node --test dist/*.test.js",
+    "start:central-dispatch": "node dist/central-dispatch-worker-main.js"
   },
   "dependencies": {
     "@haulalert/adapter-central-dispatch": "workspace:*",
@@ -25,6 +26,12 @@
     "@haulalert/filter-compiler": "workspace:*",
     "@haulalert/ingestion-service": "workspace:*",
     "@haulalert/load-model": "workspace:*",
-    "@haulalert/new-load-detector": "workspace:*"
+    "@haulalert/matcher-service": "workspace:*",
+    "@haulalert/new-load-detector": "workspace:*",
+    "@haulalert/notification-service": "workspace:*",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
   }
 }

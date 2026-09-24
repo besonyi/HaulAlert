@@ -1,7 +1,13 @@
-import type { BrowserRuntime, BrowserRuntimeSnapshot } from "@haulalert/browser-runtime-core";
+import type { BrowserRuntime, BrowserRuntimeSnapshot, PersistentSearchTab } from "@haulalert/browser-runtime-core";
 import type { CompiledProviderFilter } from "@haulalert/filter-compiler";
 
-import type { ActivatedSearch, BrowserRuntimeOrchestrator, BrowserScanCoordinator, RuntimeScanOutcome } from "./index.js";
+import type {
+  ActivatedSearch,
+  BrowserRuntimeOrchestrator,
+  BrowserScanCoordinator,
+  ProviderSearchActivation,
+  RuntimeScanOutcome
+} from "./index.js";
 
 export interface BrowserRuntimeSnapshotStore {
   load(): Promise<BrowserRuntimeSnapshot>;
@@ -26,6 +32,36 @@ export class DurableBrowserRuntimeController {
   ): Promise<ActivatedSearch> {
     try {
       return await orchestrator.activateSearch(filter, providerSearchId);
+    } finally {
+      await this.store.save(this.runtime.snapshot());
+    }
+  }
+
+  public async activateProviderSearch(
+    orchestrator: BrowserRuntimeOrchestrator,
+    search: ProviderSearchActivation,
+    providerSearchId: string
+  ): Promise<ActivatedSearch> {
+    try {
+      return await orchestrator.activateProviderSearch(search, providerSearchId);
+    } finally {
+      await this.store.save(this.runtime.snapshot());
+    }
+  }
+
+  /** Closes tabs for durable searches that are no longer active in the database. */
+  public async closeInactiveProviderSearchTabs(
+    provider: PersistentSearchTab["provider"],
+    activeProviderSearchIds: ReadonlySet<string>
+  ): Promise<readonly PersistentSearchTab[]> {
+    const closed: PersistentSearchTab[] = [];
+    try {
+      for (const tab of this.runtime.listTabs(provider)) {
+        if (tab.status !== "closed" && tab.providerSearchId !== null && !activeProviderSearchIds.has(tab.providerSearchId)) {
+          closed.push(this.runtime.closeTab(tab.id));
+        }
+      }
+      return closed;
     } finally {
       await this.store.save(this.runtime.snapshot());
     }

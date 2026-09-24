@@ -15,6 +15,11 @@ export interface CentralDispatchRuntimeCycleRunner {
   processDue(limit: number, now?: Date): Promise<CentralDispatchRuntimeCycleResult>;
 }
 
+export interface CentralDispatchRuntimeCycleOptions {
+  /** Refreshes durable provider searches after a healthy session check, before scanning. */
+  readonly beforeScan?: () => Promise<void>;
+}
+
 /**
  * Runs one Central Dispatch health-and-scan cycle. A missing browser tab never
  * falls through to a scan, avoiding stale or unauthenticated provider calls.
@@ -23,12 +28,14 @@ export class CentralDispatchRuntimeCycle implements CentralDispatchRuntimeCycleR
   public constructor(
     private readonly sessionMonitor: CentralDispatchSessionMonitor,
     private readonly durableRuntime: DurableBrowserRuntimeController,
-    private readonly scanCoordinator: BrowserScanCoordinator
+    private readonly scanCoordinator: BrowserScanCoordinator,
+    private readonly options: CentralDispatchRuntimeCycleOptions = {}
   ) {}
 
   public async processDue(limit: number, now?: Date): Promise<CentralDispatchRuntimeCycleResult> {
     const health = await this.sessionMonitor.probe();
     if (health.status === "offline") return { health, outcomes: [] };
+    await this.options.beforeScan?.();
     return {
       health,
       outcomes: await this.durableRuntime.processDue(this.scanCoordinator, limit, now)

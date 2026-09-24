@@ -17,7 +17,9 @@ import type { NormalizedLoad } from "@haulalert/load-model";
 import type { NewLoadScanResult, OrderedLoadScan } from "@haulalert/new-load-detector";
 
 export { PostgresBrowserRuntimeStateStore, type RuntimeSqlExecutor } from "./postgres-runtime-state-store.js";
+export { PostgresProviderSearchSource, type ActiveProviderSearch } from "./postgres-provider-search-source.js";
 export { DurableBrowserRuntimeController, type BrowserRuntimeSnapshotStore } from "./durable-runtime-controller.js";
+export { CentralDispatchSearchSynchronizer } from "./central-dispatch-search-synchronizer.js";
 export {
   CentralDispatchSearchNotConfiguredError,
   CentralDispatchSessionClient,
@@ -44,7 +46,8 @@ export {
 export {
   CentralDispatchRuntimeCycle,
   type CentralDispatchRuntimeCycleResult,
-  type CentralDispatchRuntimeCycleRunner
+  type CentralDispatchRuntimeCycleRunner,
+  type CentralDispatchRuntimeCycleOptions
 } from "./central-dispatch-runtime-cycle.js";
 export {
   CentralDispatchPollingWorker,
@@ -55,6 +58,13 @@ export interface ProviderSearchConfiguration {
   readonly sessionId: string;
   readonly tabId: string;
   readonly provider: CompiledProviderFilter["provider"];
+  readonly sourceFilter: SourceFilter;
+}
+
+/** A persisted provider search ready to be assigned to a browser tab. */
+export interface ProviderSearchActivation {
+  readonly provider: CompiledProviderFilter["provider"];
+  readonly sourceFilterHash: string;
   readonly sourceFilter: SourceFilter;
 }
 
@@ -81,9 +91,17 @@ export class BrowserRuntimeOrchestrator {
     filter: CompiledProviderFilter,
     providerSearchId?: string
   ): Promise<ActivatedSearch> {
+    return this.activateProviderSearch(filter, providerSearchId);
+  }
+
+  /** Activates a durable provider search without recreating an alert-only filter. */
+  public async activateProviderSearch(
+    search: ProviderSearchActivation,
+    providerSearchId?: string
+  ): Promise<ActivatedSearch> {
     const reservation = this.runtime.reserveSearchTab({
-      provider: filter.provider,
-      sourceFilterHash: filter.sourceFilterHash,
+      provider: search.provider,
+      sourceFilterHash: search.sourceFilterHash,
       ...(providerSearchId === undefined ? {} : { providerSearchId })
     });
 
@@ -91,19 +109,19 @@ export class BrowserRuntimeOrchestrator {
       return reservation;
     }
 
-    return this.configureNewSearch(reservation, filter);
+    return this.configureNewSearch(reservation, search);
   }
 
   private async configureNewSearch(
     reservation: SearchTabReservation,
-    filter: CompiledProviderFilter
+    search: ProviderSearchActivation
   ): Promise<ActivatedSearch> {
     try {
       await this.driver.configureSearch({
         sessionId: reservation.tab.sessionId,
         tabId: reservation.tab.id,
-        provider: filter.provider,
-        sourceFilter: filter.sourceFilter
+        provider: search.provider,
+        sourceFilter: search.sourceFilter
       });
 
       return {

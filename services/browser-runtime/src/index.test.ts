@@ -68,6 +68,28 @@ describe("browser runtime orchestrator", () => {
     await assert.rejects(() => orchestrator.activateSearch(compiledFilter), /Provider page did not load/);
     assert.equal(runtime.listTabs()[0]?.status, "closed");
   });
+
+  it("activates a persisted provider search without rebuilding its alert filter", async () => {
+    const calls: unknown[] = [];
+    const runtime = createRuntime();
+    const orchestrator = new BrowserRuntimeOrchestrator(runtime, {
+      configureSearch: async (input) => { calls.push(input); }
+    });
+
+    const activated = await orchestrator.activateProviderSearch({
+      provider: "central-dispatch",
+      sourceFilter: { trailerTypes: ["enclosed"] },
+      sourceFilterHash: "persisted-hash"
+    }, "11111111-1111-4111-8111-111111111111");
+
+    assert.equal(activated.tab.providerSearchId, "11111111-1111-4111-8111-111111111111");
+    assert.deepEqual(calls, [{
+      sessionId: "central-1",
+      tabId: activated.tab.id,
+      provider: "central-dispatch",
+      sourceFilter: { trailerTypes: ["enclosed"] }
+    }]);
+  });
 });
 
 describe("session search gateway", () => {

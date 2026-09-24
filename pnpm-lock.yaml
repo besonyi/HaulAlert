@@ -323,9 +323,22 @@ importers:
       '@haulalert/load-model':
         specifier: workspace:*
         version: link:../../packages/load-model
+      '@haulalert/matcher-service':
+        specifier: workspace:*
+        version: link:../matcher
       '@haulalert/new-load-detector':
         specifier: workspace:*
         version: link:../../packages/new-load-detector
+      '@haulalert/notification-service':
+        specifier: workspace:*
+        version: link:../notifications
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
 
   services/ingestion:
     dependencies:

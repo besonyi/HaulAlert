@@ -60,4 +60,33 @@ describe("durable browser runtime controller", () => {
 
     assert.deepEqual(statuses, ["closed"]);
   });
+
+  it("closes only tabs whose durable provider search has become inactive", async () => {
+    let tabNumber = 0;
+    const runtime = new BrowserRuntime({ createTabId: () => `tab-${++tabNumber}` });
+    runtime.registerSession({ id: "central-1", provider: "central-dispatch" });
+    const retained = runtime.reserveSearchTab({
+      provider: "central-dispatch", sourceFilterHash: "retained", providerSearchId: "11111111-1111-4111-8111-111111111111"
+    });
+    runtime.markTabReady(retained.tab.id);
+    const retired = runtime.reserveSearchTab({
+      provider: "central-dispatch", sourceFilterHash: "retired", providerSearchId: "22222222-2222-4222-8222-222222222222"
+    });
+    runtime.markTabReady(retired.tab.id);
+    let saves = 0;
+    const controller = new DurableBrowserRuntimeController(runtime, {
+      load: async () => ({ sessions: [], tabs: [] }),
+      save: async () => { saves += 1; }
+    });
+
+    const closed = await controller.closeInactiveProviderSearchTabs(
+      "central-dispatch",
+      new Set(["11111111-1111-4111-8111-111111111111"])
+    );
+
+    assert.deepEqual(closed.map((tab) => tab.id), [retired.tab.id]);
+    assert.equal(runtime.listTabs().find((tab) => tab.id === retained.tab.id)?.status, "ready");
+    assert.equal(runtime.listTabs().find((tab) => tab.id === retired.tab.id)?.status, "closed");
+    assert.equal(saves, 1);
+  });
 });
