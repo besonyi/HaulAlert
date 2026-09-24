@@ -7,6 +7,11 @@ import {
 import { normalizeCentralDispatchSearchResponse } from "@haulalert/adapter-central-dispatch";
 import { normalizeShipCarsSearchResponse } from "@haulalert/adapter-shipcars";
 import { normalizeSuperDispatchSearchResponse } from "@haulalert/adapter-super-dispatch";
+import {
+  createCentralDispatchCdpSessionClient,
+  createLocalCentralDispatchCdpSessionClient,
+  type ChromeDevToolsRuntime
+} from "./central-dispatch-cdp-executor.js";
 import type { CompiledProviderFilter, SourceFilter } from "@haulalert/filter-compiler";
 import type { NormalizedLoad } from "@haulalert/load-model";
 import type { NewLoadScanResult, OrderedLoadScan } from "@haulalert/new-load-detector";
@@ -234,6 +239,33 @@ export function createHaulAlertSessionSearchGateway(
   clients: ProviderSessionSearchClients
 ): SessionSearchGateway {
   return new SessionSearchGateway(createHaulAlertSessionAdapters(clients));
+}
+
+/**
+ * Creates a runnable gateway for the first live provider without requiring
+ * placeholder sessions for Super Dispatch or Ship.Cars.
+ */
+export function createCentralDispatchCdpSearchGateway(
+  runtime: ChromeDevToolsRuntime
+): SessionSearchGateway {
+  return new SessionSearchGateway([
+    new NormalizingSessionProviderAdapter(
+      "central-dispatch",
+      createCentralDispatchCdpSessionClient(runtime),
+      normalizeCentralDispatchSearchResponse
+    )
+  ]);
+}
+
+/** Uses the local Chrome DevTools endpoint for the Central Dispatch-only gateway. */
+export function createLocalCentralDispatchCdpSearchGateway(endpoint?: string): SessionSearchGateway {
+  return new SessionSearchGateway([
+    new NormalizingSessionProviderAdapter(
+      "central-dispatch",
+      createLocalCentralDispatchCdpSessionClient(endpoint),
+      normalizeCentralDispatchSearchResponse
+    )
+  ]);
 }
 
 export interface ScanProcessor {

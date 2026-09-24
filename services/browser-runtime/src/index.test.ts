@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { BrowserRuntime, ScanScheduler } from "@haulalert/browser-runtime-core";
-import type { CompiledProviderFilter } from "@haulalert/filter-compiler";
+import { createSourceFilterHash, type CompiledProviderFilter } from "@haulalert/filter-compiler";
 import type { NormalizedLoad } from "@haulalert/load-model";
 
 import {
   BrowserRuntimeOrchestrator,
   BrowserScanCoordinator,
+  createCentralDispatchCdpSearchGateway,
   createHaulAlertSessionSearchGateway,
   NormalizingSessionProviderAdapter,
   SessionSearchGateway,
@@ -19,6 +20,7 @@ import {
   type ScanProcessor,
   type SessionBackedProviderAdapter
 } from "./index.js";
+import type { ChromeDevToolsTarget } from "./central-dispatch-cdp-executor.js";
 
 const compiledFilter: CompiledProviderFilter = {
   provider: "central-dispatch",
@@ -209,6 +211,56 @@ describe("HaulAlert session adapter composition", () => {
       ["shipcars", "shipcars-1"]
     ]);
     assert.equal(superDispatch.isTruncated, true);
+  });
+});
+
+describe("Central Dispatch CDP gateway composition", () => {
+  it("runs Central Dispatch without requiring placeholder clients for other providers", async () => {
+    const target: ChromeDevToolsTarget = {
+      id: "central-tab",
+      type: "page",
+      url: "https://app.centraldispatch.com/search",
+      webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/page/central-tab"
+    };
+    const gateway = createCentralDispatchCdpSearchGateway({
+      findCentralDispatchTarget: async () => target,
+      evaluateJson: async () => ({ items: [{ id: "central-1" }], total: 1 })
+    });
+    const sourceFilter = { trailerTypes: ["open"] as ("open" | "enclosed")[] };
+    const sourceFilterHash = createSourceFilterHash("central-dispatch", sourceFilter);
+
+    await gateway.configureSearch({
+      sessionId: "central-session",
+      tabId: "central-tab",
+      provider: "central-dispatch",
+      sourceFilter
+    });
+    const scan = await gateway.scan({
+      sessionId: "central-session",
+      tabId: "central-tab",
+      provider: "central-dispatch",
+      sourceFilterHash
+    });
+
+    assert.deepEqual(scan, {
+      searchId: `central-dispatch:${sourceFilterHash}`,
+      loads: [{
+        provider: "central-dispatch",
+        providerLoadId: "central-1",
+        pickup: { city: null, state: null, postalCode: null, coordinates: null },
+        delivery: { city: null, state: null, postalCode: null, coordinates: null },
+        vehicleCount: 1,
+        trailerType: "unknown",
+        payUsd: null,
+        distanceMiles: null,
+        ratePerMile: null,
+        readyAt: null,
+        postedAt: null,
+        sourceUrl: "https://app.centraldispatch.com/search",
+        broker: null
+      }],
+      isTruncated: false
+    });
   });
 });
 
