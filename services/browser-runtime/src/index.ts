@@ -331,6 +331,7 @@ export interface ScanProcessor {
 
 export interface ScanHistoryRecorder {
   record(input: CompletedProviderScan, result: NewLoadScanResult): Promise<void>;
+  recordFailure?(input: FailedProviderScan): Promise<void>;
 }
 
 export interface CompletedProviderScan {
@@ -338,6 +339,14 @@ export interface CompletedProviderScan {
   readonly scan: OrderedLoadScan;
   readonly startedAt: Date;
   readonly completedAt: Date;
+}
+
+export interface FailedProviderScan {
+  readonly providerSearchId: string;
+  readonly startedAt: Date;
+  readonly completedAt: Date;
+  /** Stable, non-sensitive classification; never persist the exception message. */
+  readonly errorCode: string;
 }
 
 export interface HistoryAwareScanProcessor extends ScanProcessor {
@@ -359,7 +368,12 @@ export type RuntimeScanOutcome =
       readonly result: NewLoadScanResult;
       readonly historyError?: Error;
     }
-  | { readonly status: "failed"; readonly tab: PersistentSearchTab; readonly error: Error };
+  | {
+      readonly status: "failed";
+      readonly tab: PersistentSearchTab;
+      readonly error: Error;
+      readonly historyError?: Error;
+    };
 
 /**
  * Executes due provider searches serially, preserves the tab scheduling signal,
@@ -387,8 +401,8 @@ export class BrowserScanCoordinator {
     const outcomes: RuntimeScanOutcome[] = [];
     for (const scheduled of this.scheduler.selectDue(this.runtime.listScannableTabs(), now, limit)) {
       const { tab } = scheduled;
+      const startedAt = this.clock();
       try {
-        const startedAt = this.clock();
         const scan = await this.scanner.scan({
           sessionId: tab.sessionId,
           tabId: tab.id,
@@ -411,7 +425,13 @@ export class BrowserScanCoordinator {
       } catch (cause) {
         const error = cause instanceof Error ? cause : new Error("Unknown provider scan failure");
         this.scheduler.forget(tab.id);
-        outcomes.push({ status: "failed", tab: this.runtime.markTabDegraded(tab.id), error });
+        const historyError = await this.recordFailure(tab, startedAt, this.clock(), error);
+        outcomes.push({
+          status: "failed",
+          tab: this.runtime.markTabDegraded(tab.id),
+          error,
+          ...(historyError === undefined ? {} : { historyError })
+        });
       }
     }
     return outcomes;
@@ -434,6 +454,26 @@ export class BrowserScanCoordinator {
     const processor = this.processor as HistoryAwareScanProcessor;
     return processor.processCompletedScan({ providerSearchId: tab.providerSearchId, scan, startedAt, completedAt }, this.history);
   }
+
+  private async recordFailure(
+    tab: PersistentSearchTab,
+    startedAt: Date,
+    completedAt: Date,
+    error: Error
+  ): Promise<Error | undefined> {
+    if (tab.providerSearchId === null || this.history?.recordFailure === undefined) return undefined;
+    try {
+      await this.history.recordFailure({
+        providerSearchId: tab.providerSearchId,
+        startedAt,
+        completedAt,
+        errorCode: scanErrorCode(error)
+      });
+      return undefined;
+    } catch (cause) {
+      return cause instanceof Error ? cause : new Error("Could not record failed provider scan");
+    }
+  }
 }
 
 function assertProviderRows(scan: OrderedLoadScan, tab: PersistentSearchTab): void {
@@ -444,4 +484,10 @@ function assertProviderRows(scan: OrderedLoadScan, tab: PersistentSearchTab): vo
 
 function isHistoryAware(processor: ScanProcessor): processor is HistoryAwareScanProcessor {
   return "processCompletedScan" in processor && typeof processor.processCompletedScan === "function";
+}
+
+function scanErrorCode(error: Error): string {
+  if (error.name === "Error") return "scan_failed";
+  const normalized = error.name.replace(/([a-z])([A-Z])/g, "$1-$2").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
+  return normalized.length === 0 ? "scan_failed" : normalized.slice(0, 80);
 }

@@ -39,3 +39,30 @@ test("Postgres scan history records the durable new-load decision", async () => 
     true
   ]);
 });
+
+test("Postgres scan history stores only a safe classification for a failed scan", async () => {
+  let captured: { statement: string; parameters: readonly unknown[] } | undefined;
+  const database: SqlExecutor = {
+    query: async (statement, parameters) => {
+      captured = { statement, parameters };
+      return { rows: [] };
+    }
+  };
+  const startedAt = new Date("2026-09-23T12:00:00.000Z");
+  const completedAt = new Date("2026-09-23T12:00:04.000Z");
+
+  await new PostgresScanHistoryRecorder(database).recordFailure({
+    providerSearchId: "11111111-1111-4111-8111-111111111111",
+    startedAt,
+    completedAt,
+    errorCode: "central-dispatch-tab-not-found"
+  });
+
+  assert.match(captured?.statement ?? "", /error_code/);
+  assert.deepEqual(captured?.parameters, [
+    "11111111-1111-4111-8111-111111111111",
+    startedAt.toISOString(),
+    completedAt.toISOString(),
+    "central-dispatch-tab-not-found"
+  ]);
+});

@@ -188,6 +188,7 @@ export class ScanIngestionProcessor {
 export {
   PostgresScanHistoryRecorder,
   type CompletedProviderScan,
+  type FailedProviderScan,
   type ScanHistoryRecorder
 } from "./postgres-scan-history.js";
 export {

@@ -16,6 +16,7 @@ import {
   type ProviderSearchDriver,
   type ProviderSessionSearchClient,
   type ProviderSearchScanner,
+  type HistoryAwareScanProcessor,
   type ScanHistoryRecorder,
   type ScanProcessor,
   type SessionBackedProviderAdapter
@@ -393,6 +394,39 @@ describe("browser scan coordinator", () => {
       scan: { searchId: "central-dispatch:source-hash", loads: [], isTruncated: false },
       startedAt: scanAt,
       completedAt: scanAt
+    });
+  });
+
+  it("records a safe failure classification for a durable provider search", async () => {
+    const scanAt = new Date("2026-09-23T12:00:00.000Z");
+    const runtime = createRuntime(() => scanAt);
+    const reservation = runtime.reserveSearchTab({
+      provider: "central-dispatch",
+      sourceFilterHash: "source-hash",
+      providerSearchId: "11111111-1111-4111-8111-111111111111"
+    });
+    runtime.markTabReady(reservation.tab.id);
+    let recorded: unknown;
+    const history: ScanHistoryRecorder = {
+      record: async () => undefined,
+      recordFailure: async (input) => { recorded = input; }
+    };
+    const processor: ScanProcessor & { processCompletedScan: HistoryAwareScanProcessor["processCompletedScan"] } = {
+      process: async () => ({ scan: { newLoads: [], seeded: true, boundaryFound: false, overflowRisk: false } }),
+      processCompletedScan: async () => ({ scan: { newLoads: [], seeded: true, boundaryFound: false, overflowRisk: false } })
+    };
+    const coordinator = new BrowserScanCoordinator(runtime, new ScanScheduler(), {
+      scan: async () => { throw new Error("Central Dispatch tab unexpectedly closed"); }
+    }, processor, { history, clock: () => scanAt });
+
+    const outcomes = await coordinator.processDue(1, scanAt);
+
+    assert.equal(outcomes[0]?.status, "failed");
+    assert.deepEqual(recorded, {
+      providerSearchId: "11111111-1111-4111-8111-111111111111",
+      startedAt: scanAt,
+      completedAt: scanAt,
+      errorCode: "scan_failed"
     });
   });
 });
