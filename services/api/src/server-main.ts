@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresReferralRepository, PostgresTelegramUserResolver } from "./index.js";
+import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresReferralRepository, PostgresTelegramUserResolver, type ReferralSummary } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
@@ -14,6 +14,7 @@ export interface ApiServerConfig {
   readonly telegramBotToken: string;
   readonly port: number;
   readonly adminTelegramUserIds: readonly string[];
+  readonly telegramBotUsername: string;
 }
 
 export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env): ApiServerConfig {
@@ -21,7 +22,8 @@ export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env)
     databaseUrl: getDatabaseUrl(environment),
     telegramBotToken: getTelegramBotToken(environment),
     port: getPort(environment.API_PORT),
-    adminTelegramUserIds: getAdminTelegramUserIds(environment.ADMIN_TELEGRAM_USER_IDS)
+    adminTelegramUserIds: getAdminTelegramUserIds(environment.ADMIN_TELEGRAM_USER_IDS),
+    telegramBotUsername: getTelegramBotUsername(environment.TELEGRAM_BOT_USERNAME)
   };
 }
 
@@ -37,7 +39,12 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
     adminSearch: new PostgresAdminSearchRepository(database),
     brokerDirectory: new PostgresBrokerDirectoryRepository(database),
     entitlements: new PostgresEntitlementRepository(database),
-    referrals: new PostgresReferralRepository(database),
+    referrals: {
+      getForUser: async (userId) => withInviteLink(
+        await new PostgresReferralRepository(database).getForUser(userId),
+        config.telegramBotUsername
+      )
+    },
     isAdmin: (telegramUserId) => isAdminTelegramUser(telegramUserId, config.adminTelegramUserIds),
     authenticate: async (initData) => {
       const telegram = verifyTelegramMiniAppInitData(initData, config.telegramBotToken);
@@ -64,6 +71,21 @@ function getPort(value: string | undefined): number {
     throw new Error("API_PORT must be an integer between 1 and 65535");
   }
   return port;
+}
+
+export function getTelegramBotUsername(value: string | undefined): string {
+  const username = (value?.trim() || "HaulAlertBot").replace(/^@/, "");
+  if (!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(username)) {
+    throw new Error("TELEGRAM_BOT_USERNAME must be a valid Telegram bot username");
+  }
+  return username;
+}
+
+export function withInviteLink(referral: ReferralSummary, telegramBotUsername: string): ReferralSummary & { readonly inviteLink: string } {
+  return {
+    ...referral,
+    inviteLink: `https://t.me/${telegramBotUsername}?start=ref_${referral.code}`
+  };
 }
 
 function listen(server: import("node:http").Server, port: number): Promise<void> {

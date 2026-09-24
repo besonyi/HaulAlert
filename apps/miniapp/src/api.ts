@@ -46,6 +46,18 @@ export interface MiniAppEntitlement {
   readonly cancelAtPeriodEnd: boolean;
 }
 
+export interface MiniAppReferralSummary {
+  readonly code: string;
+  readonly inviteLink: string;
+  readonly totalInvited: number;
+  readonly registered: number;
+  readonly activePaid: number;
+  readonly inactive: number;
+  readonly monthlyCreditCents: number;
+  readonly partnerProgressActivePaid: number;
+  readonly partnerUnlockAt: number;
+}
+
 export class MiniAppApiError extends Error {
   public constructor(readonly statusCode: number, readonly code: string) {
     super(code);
@@ -82,6 +94,11 @@ export class MiniAppApiClient {
   public async cancelSubscription(): Promise<MiniAppEntitlement> {
     const response = await this.send("/v1/account/subscription/cancel", "POST");
     return (await response.json() as { entitlement: MiniAppEntitlement }).entitlement;
+  }
+
+  public async getReferralSummary(): Promise<MiniAppReferralSummary> {
+    const response = await this.send("/v1/referrals", "GET");
+    return (await response.json() as { referral: MiniAppReferralSummary }).referral;
   }
 
   public async createAlert(filter: CanonicalFilter): Promise<MiniAppAlert> {

@@ -74,3 +74,15 @@ test("Mini App API client searches broker profiles with Telegram authorization",
   assert.equal(captured?.input, "/api/v1/brokers?q=MC%20123");
   assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
 });
+
+test("Mini App API client reads the signed-in user's referral summary", async () => {
+  let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
+  const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {
+    captured = { input, ...(init === undefined ? {} : { init }) };
+    return new Response(JSON.stringify({ referral: { code: "A7K92D4F", inviteLink: "https://t.me/HaulAlertBot?start=ref_A7K92D4F" } }));
+  });
+  const referral = await client.getReferralSummary();
+  assert.equal(captured?.input, "/api/v1/referrals");
+  assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
+  assert.equal(referral.code, "A7K92D4F");
+});

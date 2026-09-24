@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { getTelegramBotUsername, withInviteLink } from "./server-main.js";
+
+test("referral links use the configured Telegram bot username", () => {
+  assert.equal(getTelegramBotUsername(undefined), "HaulAlertBot");
+  assert.equal(getTelegramBotUsername("@CustomHaulBot"), "CustomHaulBot");
+  assert.throws(() => getTelegramBotUsername("not valid"), /TELEGRAM_BOT_USERNAME/);
+  assert.equal(withInviteLink({
+    code: "A7K92D4F", totalInvited: 0, registered: 0, activePaid: 0, inactive: 0,
+    monthlyCreditCents: 0, partnerProgressActivePaid: 0, partnerUnlockAt: 5
+  }, "CustomHaulBot").inviteLink, "https://t.me/CustomHaulBot?start=ref_A7K92D4F");
+});

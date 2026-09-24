@@ -6,7 +6,8 @@ import {
   type MiniAppAlert,
   type MiniAppBrokerProfile,
   type MiniAppDashboard,
-  type MiniAppEntitlement
+  type MiniAppEntitlement,
+  type MiniAppReferralSummary
 } from "./api.js";
 import { locationsFromForm } from "./location-form.js";
 import { providerListLabel, providerMonitoringSummary } from "./provider-copy.js";
@@ -36,6 +37,7 @@ applyTelegramTheme(telegram);
 let alerts: readonly MiniAppAlert[] = [];
 let dashboard: MiniAppDashboard | undefined;
 let entitlement: MiniAppEntitlement | undefined;
+let referral: MiniAppReferralSummary | undefined;
 let screen: "dashboard" | "create" = "dashboard";
 let editingAlert: MiniAppAlert | undefined;
 let blockedBrokerIds: readonly string[] = [];
@@ -49,7 +51,9 @@ void refresh();
 async function refresh(): Promise<void> {
   if (client === undefined) return render();
   try {
-    [alerts, dashboard, entitlement] = await Promise.all([client.listAlerts(), client.getDashboard(), client.getEntitlement()]);
+    [alerts, dashboard, entitlement, referral] = await Promise.all([
+      client.listAlerts(), client.getDashboard(), client.getEntitlement(), client.getReferralSummary()
+    ]);
     message = "";
   } catch (error: unknown) {
     message = readableError(error);
@@ -82,6 +86,7 @@ function dashboardMarkup(): string {
       : `<div class="cards">${alerts.map(alertMarkup).join("")}</div>`}
     ${recentNotificationsMarkup()}
     ${planMarkup()}
+    ${referralMarkup()}
   </section>`;
 }
 
@@ -89,6 +94,21 @@ function planMarkup(): string {
   if (entitlement === undefined) return "";
   const status = entitlement.cancelAtPeriodEnd ? "Cancellation scheduled" : entitlement.subscriptionStatus === "active" ? "Active" : entitlement.subscriptionStatus;
   return `<section class="plan"><div><strong>${escapeHtml(entitlement.planName)} plan</strong><span>${entitlement.activeAlertCount} of ${entitlement.maxActiveAlerts} active alerts · ${escapeHtml(status)}</span></div>${entitlement.subscriptionStatus === "active" && !entitlement.cancelAtPeriodEnd ? `<button class="secondary" type="button" data-cancel-subscription>Cancel at period end</button>` : ""}</section>`;
+}
+
+function referralMarkup(): string {
+  if (referral === undefined) return "";
+  const remaining = Math.max(0, referral.partnerUnlockAt - referral.partnerProgressActivePaid);
+  const credit = referral.monthlyCreditCents === 0 ? "No monthly credit yet" : `$${(referral.monthlyCreditCents / 100).toFixed(2)} monthly credit`;
+  const progress = remaining === 0
+    ? "Partner eligibility reached — approval will be available soon."
+    : `Invite ${remaining} more paying ${remaining === 1 ? "user" : "users"} to unlock Partner.`;
+  return `<section class="referral">
+    <div class="referral-heading"><div><p class="eyebrow">INVITE & EARN</p><h2>Referral program</h2></div><span>${referral.partnerProgressActivePaid} / ${referral.partnerUnlockAt}</span></div>
+    <p class="referral-copy">${escapeHtml(progress)}</p>
+    <div class="referral-stats"><span><strong>${referral.totalInvited}</strong> invited</span><span><strong>${referral.activePaid}</strong> active paid</span><span><strong>${escapeHtml(credit)}</strong></span></div>
+    <div class="referral-link"><code>${escapeHtml(referral.code)}</code><button class="secondary" type="button" data-copy-referral>Copy invite link</button></div>
+  </section>`;
 }
 
 function recentNotificationsMarkup(): string {
@@ -218,6 +238,7 @@ function bindInteractions(): void {
     button.addEventListener("click", () => removeBlockedBroker(button.dataset.removeBroker));
   });
   app.querySelector<HTMLButtonElement>("[data-cancel-subscription]")?.addEventListener("click", () => { void cancelSubscription(); });
+  app.querySelector<HTMLButtonElement>("[data-copy-referral]")?.addEventListener("click", () => { void copyReferralLink(); });
 }
 
 function updateProviderSummary(): void {
@@ -362,6 +383,17 @@ async function cancelSubscription(): Promise<void> {
     message = "Your plan will end at the close of its current period.";
   } catch (error: unknown) {
     message = readableError(error);
+  }
+  render();
+}
+
+async function copyReferralLink(): Promise<void> {
+  if (referral === undefined) return;
+  try {
+    await navigator.clipboard.writeText(referral.inviteLink);
+    message = "Invite link copied. Share it in Telegram.";
+  } catch {
+    message = `Copy this invite code: ${referral.code}`;
   }
   render();
 }
