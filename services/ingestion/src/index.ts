@@ -10,6 +10,8 @@ import type {
   DurableNotificationDeliveryEnqueuer,
   SqlExecutor
 } from "@haulalert/notification-service";
+import { getDeliveryKey } from "@haulalert/notification-service";
+import type { TransactionalLoadOutbox } from "./postgres-load-delivery-outbox.js";
 
 export interface LoadPersistence {
   record(load: NormalizedLoad, seenAt?: Date): Promise<{ readonly isNew: boolean }>;
@@ -17,6 +19,10 @@ export interface LoadPersistence {
 
 export interface AlertMatchFinder {
   findMatches(load: NormalizedLoad, now?: Date): readonly AlertMatch[] | Promise<readonly AlertMatch[]>;
+}
+
+export interface LoadIngestion {
+  ingest(load: NormalizedLoad, now?: Date): Promise<IngestionResult>;
 }
 
 /** Stores normalized loads once globally, while updating their latest observation. */
@@ -89,6 +95,34 @@ export class DurableLoadIngestionService {
   }
 }
 
+/** Uses the transactional outbox to avoid losing delivery jobs after a load insert. */
+export class TransactionalLoadIngestionService implements LoadIngestion {
+  public constructor(
+    private readonly outbox: TransactionalLoadOutbox,
+    private readonly alerts: AlertMatchFinder
+  ) {}
+
+  public async ingest(load: NormalizedLoad, now: Date = new Date()): Promise<IngestionResult> {
+    const matches = await this.alerts.findMatches(load, now);
+    const persisted = await this.outbox.persist(load, matches, now);
+    if (!persisted.isNew) return { status: "known", load };
+
+    const deliveriesByKey = new Map(persisted.queuedDeliveries.map((delivery) => [delivery.deliveryKey, delivery]));
+    return {
+      status: "new",
+      load,
+      matches,
+      deliveries: matches.map((match): IngestionDeliveryAttempt => {
+        const deliveryKey = getDeliveryKey(match);
+        const queued = deliveriesByKey.get(deliveryKey);
+        return queued === undefined
+          ? { status: "queued", match, result: { status: "duplicate", deliveryKey } }
+          : { status: "queued", match, result: { status: "queued", ...queued } };
+      })
+    };
+  }
+}
+
 export interface ProviderLoadCollector<SearchTarget> {
   collect(target: SearchTarget): Promise<OrderedLoadScan>;
 }
@@ -106,7 +140,7 @@ export interface ScannedIngestionResult {
 export class ScanIngestionProcessor {
   public constructor(
     private readonly detector: NewLoadDetector,
-    private readonly ingestion: DurableLoadIngestionService
+    private readonly ingestion: LoadIngestion
   ) {}
 
   public async process(scan: OrderedLoadScan, now: Date = new Date()): Promise<ScannedIngestionResult> {
@@ -150,3 +184,9 @@ export {
   type CompletedProviderScan,
   type ScanHistoryRecorder
 } from "./postgres-scan-history.js";
+export {
+  PostgresLoadDeliveryOutbox,
+  type QueuedOutboxDelivery,
+  type TransactionalLoadOutbox,
+  type TransactionalLoadOutboxResult
+} from "./postgres-load-delivery-outbox.js";

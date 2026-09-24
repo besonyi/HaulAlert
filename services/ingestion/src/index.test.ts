@@ -9,11 +9,14 @@ import type { DurableNotificationDeliveryEnqueuer, SqlExecutor } from "@haulaler
 
 import {
   DurableLoadIngestionService,
+  TransactionalLoadIngestionService,
   type ScanHistoryRecorder,
   PostgresLoadRepository,
   ScanIngestionProcessor,
+  type AlertMatchFinder,
   type LoadPersistence
 } from "./index.js";
+import type { TransactionalLoadOutbox } from "./postgres-load-delivery-outbox.js";
 
 const load: NormalizedLoad = {
   provider: "central-dispatch",
@@ -157,5 +160,29 @@ describe("durable load ingestion", () => {
 
     assert.equal(result.scan.seeded, true);
     assert.equal(result.historyError?.message, "database unavailable");
+  });
+
+  it("uses an atomic outbox result to create every delivery outcome for a new load", async () => {
+    const outbox: TransactionalLoadOutbox = {
+      persist: async () => ({
+        isNew: true,
+        queuedDeliveries: [{ deliveryId: "delivery-1", deliveryKey: "central-dispatch:829181:alert-1:user-1" }]
+      })
+    };
+    const matcher: AlertMatchFinder = {
+      findMatches: () => [{ alertId: "alert-1", userId: "user-1", telegramChatId: "chat-1", load }]
+    };
+
+    const result = await new TransactionalLoadIngestionService(outbox, matcher).ingest(load);
+
+    assert.equal(result.status, "new");
+    if (result.status !== "new") assert.fail("Expected a new load ingestion result");
+    const delivery = result.deliveries[0];
+    if (delivery === undefined || delivery.status !== "queued") assert.fail("Expected a queued delivery result");
+    assert.deepEqual(delivery.result, {
+      status: "queued",
+      deliveryId: "delivery-1",
+      deliveryKey: "central-dispatch:829181:alert-1:user-1"
+    });
   });
 });
