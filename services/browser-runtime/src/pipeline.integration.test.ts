@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 
 import { BrowserRuntime, ScanScheduler } from "@haulalert/browser-runtime-core";
 import { ScanIngestionProcessor, type LoadIngestion } from "@haulalert/ingestion-service";
-import { InMemorySeenLoadStore, NewLoadDetector } from "@haulalert/new-load-detector";
+import type { NormalizedLoad } from "@haulalert/load-model";
+import { AsyncNewLoadDetector, InMemorySeenLoadStore, NewLoadDetector, type AsyncSeenLoadStore, type OrderedLoadScan } from "@haulalert/new-load-detector";
 
 import { BrowserRuntimeOrchestrator, BrowserScanCoordinator, createHaulAlertSessionSearchGateway } from "./index.js";
 
@@ -31,5 +32,24 @@ describe("provider scan ingestion pipeline", () => {
     await coordinator.processDue(1, now);
 
     assert.deepEqual(ingested, ["new"]);
+  });
+
+  it("acknowledges a durable provider delta after ingestion", async () => {
+    const seen = new Set<string>();
+    const initialized = new Set<string>();
+    const store: AsyncSeenLoadStore = {
+      has: async (_search, key) => seen.has(key),
+      add: async (_search, key) => { seen.add(key); },
+      isSearchInitialized: async (search) => initialized.has(search),
+      markSearchInitialized: async (search) => { initialized.add(search); }
+    };
+    const detector = new AsyncNewLoadDetector(store);
+    const old: NormalizedLoad = { provider: "central-dispatch", providerLoadId: "old", pickup: { city: null, state: null, postalCode: null, coordinates: null }, delivery: { city: null, state: null, postalCode: null, coordinates: null }, vehicleCount: 1, trailerType: "unknown", payUsd: null, distanceMiles: null, ratePerMile: null, readyAt: null, postedAt: null, sourceUrl: null, broker: null };
+    const seed = { searchId: "central-dispatch:hash", loads: [old], isTruncated: false };
+    await detector.inspect(seed);
+    const next: OrderedLoadScan = { ...seed, loads: [{ ...old, providerLoadId: "new" }, old] };
+    const detected = await detector.inspect(next);
+    await detector.acknowledge(next, detected);
+    assert.deepEqual((await detector.inspect(next)).newLoads, []);
   });
 });
