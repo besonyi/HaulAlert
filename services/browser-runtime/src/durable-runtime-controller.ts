@@ -49,6 +49,18 @@ export class DurableBrowserRuntimeController {
     }
   }
 
+  public async reconfigureProviderSearch(
+    orchestrator: BrowserRuntimeOrchestrator,
+    tab: PersistentSearchTab,
+    search: ProviderSearchActivation
+  ): Promise<PersistentSearchTab> {
+    try {
+      return await orchestrator.reconfigureSearch(tab, search);
+    } finally {
+      await this.store.save(this.runtime.snapshot());
+    }
+  }
+
   /** Closes tabs for durable searches that are no longer active in the database. */
   public async closeInactiveProviderSearchTabs(
     provider: PersistentSearchTab["provider"],

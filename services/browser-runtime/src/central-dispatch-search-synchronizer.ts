@@ -4,6 +4,8 @@ import type { PostgresProviderSearchSource } from "./postgres-provider-search-so
 
 /** Keeps browser tabs aligned with the active Central Dispatch searches in PostgreSQL. */
 export class CentralDispatchSearchSynchronizer {
+  private readonly configuredSearchIds = new Set<string>();
+
   public constructor(
     private readonly source: PostgresProviderSearchSource,
     private readonly durableRuntime: DurableBrowserRuntimeController,
@@ -13,7 +15,11 @@ export class CentralDispatchSearchSynchronizer {
   public async synchronize(): Promise<void> {
     const searches = await this.source.listActiveCentralDispatchSearches();
     for (const search of searches) {
-      await this.durableRuntime.activateProviderSearch(this.orchestrator, search, search.id);
+      const activated = await this.durableRuntime.activateProviderSearch(this.orchestrator, search, search.id);
+      if (activated.reused && !this.configuredSearchIds.has(search.id)) {
+        await this.durableRuntime.reconfigureProviderSearch(this.orchestrator, activated.tab, search);
+      }
+      this.configuredSearchIds.add(search.id);
     }
     await this.durableRuntime.closeInactiveProviderSearchTabs(
       "central-dispatch",

@@ -112,6 +112,28 @@ export class BrowserRuntimeOrchestrator {
     return this.configureNewSearch(reservation, search);
   }
 
+  /** Rehydrates a restored, ready tab in a fresh in-memory session client. */
+  public async reconfigureSearch(
+    tab: PersistentSearchTab,
+    search: ProviderSearchActivation
+  ): Promise<PersistentSearchTab> {
+    if (tab.provider !== search.provider || tab.sourceFilterHash !== search.sourceFilterHash) {
+      throw new Error(`Cannot reconfigure tab ${tab.id} with a different provider search`);
+    }
+    try {
+      await this.driver.configureSearch({
+        sessionId: tab.sessionId,
+        tabId: tab.id,
+        provider: search.provider,
+        sourceFilter: search.sourceFilter
+      });
+      return tab;
+    } catch (error) {
+      this.runtime.markTabDegraded(tab.id);
+      throw error;
+    }
+  }
+
   private async configureNewSearch(
     reservation: SearchTabReservation,
     search: ProviderSearchActivation

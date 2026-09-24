@@ -90,6 +90,26 @@ describe("browser runtime orchestrator", () => {
       sourceFilter: { trailerTypes: ["enclosed"] }
     }]);
   });
+
+  it("rehydrates a restored ready tab without allocating another tab", async () => {
+    const calls: unknown[] = [];
+    const runtime = createRuntime();
+    const reservation = runtime.reserveSearchTab({ provider: "central-dispatch", sourceFilterHash: "persisted-hash" });
+    const tab = runtime.markTabReady(reservation.tab.id);
+    const orchestrator = new BrowserRuntimeOrchestrator(runtime, {
+      configureSearch: async (input) => { calls.push(input); }
+    });
+
+    const configured = await orchestrator.reconfigureSearch(tab, {
+      provider: "central-dispatch",
+      sourceFilterHash: "persisted-hash",
+      sourceFilter: { trailerTypes: ["open"] }
+    });
+
+    assert.equal(configured.id, tab.id);
+    assert.deepEqual(runtime.listTabs().map(({ id, status }) => ({ id, status })), [{ id: tab.id, status: "ready" }]);
+    assert.equal(calls.length, 1);
+  });
 });
 
 describe("session search gateway", () => {
