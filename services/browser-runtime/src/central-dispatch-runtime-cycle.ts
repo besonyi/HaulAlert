@@ -10,11 +10,16 @@ export interface CentralDispatchRuntimeCycleResult {
   readonly outcomes: readonly RuntimeScanOutcome[];
 }
 
+/** The small runtime boundary used by the scheduled Central Dispatch worker. */
+export interface CentralDispatchRuntimeCycleRunner {
+  processDue(limit: number, now?: Date): Promise<CentralDispatchRuntimeCycleResult>;
+}
+
 /**
  * Runs one Central Dispatch health-and-scan cycle. A missing browser tab never
  * falls through to a scan, avoiding stale or unauthenticated provider calls.
  */
-export class CentralDispatchRuntimeCycle {
+export class CentralDispatchRuntimeCycle implements CentralDispatchRuntimeCycleRunner {
   public constructor(
     private readonly sessionMonitor: CentralDispatchSessionMonitor,
     private readonly durableRuntime: DurableBrowserRuntimeController,

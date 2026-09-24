@@ -43,8 +43,13 @@ export {
 } from "./central-dispatch-session-monitor.js";
 export {
   CentralDispatchRuntimeCycle,
-  type CentralDispatchRuntimeCycleResult
+  type CentralDispatchRuntimeCycleResult,
+  type CentralDispatchRuntimeCycleRunner
 } from "./central-dispatch-runtime-cycle.js";
+export {
+  CentralDispatchPollingWorker,
+  type CentralDispatchPollingWorkerOptions
+} from "./central-dispatch-polling-worker.js";
 
 export interface ProviderSearchConfiguration {
   readonly sessionId: string;
