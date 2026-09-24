@@ -7,7 +7,7 @@ test("admin client sends Telegram authorization and returns the operational over
   let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
   const client = new AdminApiClient("signed-init-data", "/api", async (input, init) => {
     captured = { input, ...(init === undefined ? {} : { init }) };
-    return new Response(JSON.stringify({ overview: { users: 3, activeAlerts: 2, loads: 5, sessions: [], tabs: [], deliveries: [] } }));
+    return new Response(JSON.stringify({ overview: { users: 3, activeAlerts: 2, loads: 5, sessions: [], tabs: [], deliveries: [], recovery: [] } }));
   });
 
   const overview = await client.getOverview();

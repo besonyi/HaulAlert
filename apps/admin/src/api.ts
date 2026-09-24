@@ -3,6 +3,14 @@ export interface OperationalCount {
   readonly count: number;
 }
 
+export interface OperationalRecoveryItem {
+  readonly kind: "session" | "tab" | "scan";
+  readonly provider: string;
+  readonly code: string;
+  readonly observedAt: string;
+  readonly nextRecoveryAt: string | null;
+}
+
 export interface AdminSystemOverview {
   readonly users: number;
   readonly activeAlerts: number;
@@ -10,6 +18,7 @@ export interface AdminSystemOverview {
   readonly sessions: readonly OperationalCount[];
   readonly tabs: readonly OperationalCount[];
   readonly deliveries: readonly OperationalCount[];
+  readonly recovery: readonly OperationalRecoveryItem[];
 }
 
 export class AdminApiError extends Error {
