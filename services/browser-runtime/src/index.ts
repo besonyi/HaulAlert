@@ -7,13 +7,15 @@ import {
 import type { CompiledProviderFilter, SourceFilter } from "@haulalert/filter-compiler";
 import type { NewLoadScanResult, OrderedLoadScan } from "@haulalert/new-load-detector";
 
+export interface ProviderSearchConfiguration {
+  readonly sessionId: string;
+  readonly tabId: string;
+  readonly provider: CompiledProviderFilter["provider"];
+  readonly sourceFilter: SourceFilter;
+}
+
 export interface ProviderSearchDriver {
-  configureSearch(input: {
-    readonly sessionId: string;
-    readonly tabId: string;
-    readonly provider: CompiledProviderFilter["provider"];
-    readonly sourceFilter: SourceFilter;
-  }): Promise<void>;
+  configureSearch(input: ProviderSearchConfiguration): Promise<void>;
 }
 
 export interface ActivatedSearch {
@@ -71,13 +73,63 @@ export class BrowserRuntimeOrchestrator {
   }
 }
 
+export interface ProviderSearchScan {
+  readonly sessionId: string;
+  readonly tabId: string;
+  readonly provider: PersistentSearchTab["provider"];
+  readonly sourceFilterHash: string;
+}
+
 export interface ProviderSearchScanner {
-  scan(input: {
-    readonly sessionId: string;
-    readonly tabId: string;
-    readonly provider: PersistentSearchTab["provider"];
-    readonly sourceFilterHash: string;
-  }): Promise<OrderedLoadScan>;
+  scan(input: ProviderSearchScan): Promise<OrderedLoadScan>;
+}
+
+/** A provider adapter operates only within its already-authenticated session. */
+export interface SessionBackedProviderAdapter {
+  readonly provider: CompiledProviderFilter["provider"];
+  configureSearch(input: Omit<ProviderSearchConfiguration, "provider">): Promise<void>;
+  scan(input: Omit<ProviderSearchScan, "provider">): Promise<OrderedLoadScan>;
+}
+
+export class UnknownProviderAdapterError extends Error {
+  public constructor(provider: CompiledProviderFilter["provider"]) {
+    super(`No session-backed adapter is configured for provider: ${provider}`);
+    this.name = "UnknownProviderAdapterError";
+  }
+}
+
+/**
+ * HaulFlow-style boundary between session ownership and provider adapters.
+ * Browser/session code supplies opaque tab references; adapters receive only
+ * the operations for their own provider and never expose session material.
+ */
+export class SessionSearchGateway implements ProviderSearchDriver, ProviderSearchScanner {
+  private readonly adapters = new Map<CompiledProviderFilter["provider"], SessionBackedProviderAdapter>();
+
+  public constructor(adapters: readonly SessionBackedProviderAdapter[]) {
+    for (const adapter of adapters) {
+      if (this.adapters.has(adapter.provider)) {
+        throw new Error(`Duplicate session-backed adapter for provider: ${adapter.provider}`);
+      }
+      this.adapters.set(adapter.provider, adapter);
+    }
+  }
+
+  public async configureSearch(input: ProviderSearchConfiguration): Promise<void> {
+    const { provider, ...configuration } = input;
+    await this.getAdapter(provider).configureSearch(configuration);
+  }
+
+  public async scan(input: ProviderSearchScan): Promise<OrderedLoadScan> {
+    const { provider, ...scan } = input;
+    return this.getAdapter(provider).scan(scan);
+  }
+
+  private getAdapter(provider: CompiledProviderFilter["provider"]): SessionBackedProviderAdapter {
+    const adapter = this.adapters.get(provider);
+    if (adapter === undefined) throw new UnknownProviderAdapterError(provider);
+    return adapter;
+  }
 }
 
 export interface ScanProcessor {

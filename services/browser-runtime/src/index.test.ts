@@ -8,10 +8,13 @@ import type { NormalizedLoad } from "@haulalert/load-model";
 import {
   BrowserRuntimeOrchestrator,
   BrowserScanCoordinator,
+  SessionSearchGateway,
+  UnknownProviderAdapterError,
   type ProviderSearchDriver,
   type ProviderSearchScanner,
   type ScanHistoryRecorder,
-  type ScanProcessor
+  type ScanProcessor,
+  type SessionBackedProviderAdapter
 } from "./index.js";
 
 const compiledFilter: CompiledProviderFilter = {
@@ -59,6 +62,54 @@ describe("browser runtime orchestrator", () => {
 
     await assert.rejects(() => orchestrator.activateSearch(compiledFilter), /Provider page did not load/);
     assert.equal(runtime.listTabs()[0]?.status, "closed");
+  });
+});
+
+describe("session search gateway", () => {
+  it("routes configuration and scans only to the matching provider adapter", async () => {
+    const calls: unknown[] = [];
+    const adapter: SessionBackedProviderAdapter = {
+      provider: "central-dispatch",
+      configureSearch: async (input) => { calls.push(["configure", input]); },
+      scan: async (input) => {
+        calls.push(["scan", input]);
+        return { searchId: "central-dispatch:source-hash", loads: [], isTruncated: false };
+      }
+    };
+    const gateway = new SessionSearchGateway([adapter]);
+
+    await gateway.configureSearch({
+      sessionId: "session-1",
+      tabId: "tab-1",
+      provider: "central-dispatch",
+      sourceFilter: { trailerTypes: ["open"] }
+    });
+    const result = await gateway.scan({
+      sessionId: "session-1",
+      tabId: "tab-1",
+      provider: "central-dispatch",
+      sourceFilterHash: "source-hash"
+    });
+
+    assert.deepEqual(calls, [
+      ["configure", { sessionId: "session-1", tabId: "tab-1", sourceFilter: { trailerTypes: ["open"] } }],
+      ["scan", { sessionId: "session-1", tabId: "tab-1", sourceFilterHash: "source-hash" }]
+    ]);
+    assert.equal(result.searchId, "central-dispatch:source-hash");
+  });
+
+  it("rejects a provider that has no configured session adapter", async () => {
+    const gateway = new SessionSearchGateway([]);
+
+    await assert.rejects(
+      () => gateway.scan({
+        sessionId: "session-1",
+        tabId: "tab-1",
+        provider: "shipcars",
+        sourceFilterHash: "source-hash"
+      }),
+      UnknownProviderAdapterError
+    );
   });
 });
 
