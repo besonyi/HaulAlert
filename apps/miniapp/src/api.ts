@@ -34,6 +34,16 @@ export interface MiniAppBrokerProfile {
   readonly matchedLoadCount: number;
 }
 
+export interface MiniAppEntitlement {
+  readonly planId: string;
+  readonly planName: string;
+  readonly maxActiveAlerts: number;
+  readonly activeAlertCount: number;
+  readonly subscriptionStatus: "active" | "cancelled" | "expired";
+  readonly currentPeriodEndsAt: string | null;
+  readonly cancelAtPeriodEnd: boolean;
+}
+
 export class MiniAppApiError extends Error {
   public constructor(readonly statusCode: number, readonly code: string) {
     super(code);
@@ -60,6 +70,16 @@ export class MiniAppApiClient {
   public async searchBrokers(query: string): Promise<readonly MiniAppBrokerProfile[]> {
     const response = await this.send(`/v1/brokers?q=${encodeURIComponent(query)}`, "GET");
     return (await response.json() as { brokers: MiniAppBrokerProfile[] }).brokers;
+  }
+
+  public async getEntitlement(): Promise<MiniAppEntitlement> {
+    const response = await this.send("/v1/account/entitlement", "GET");
+    return (await response.json() as { entitlement: MiniAppEntitlement }).entitlement;
+  }
+
+  public async cancelSubscription(): Promise<MiniAppEntitlement> {
+    const response = await this.send("/v1/account/subscription/cancel", "POST");
+    return (await response.json() as { entitlement: MiniAppEntitlement }).entitlement;
   }
 
   public async createAlert(filter: CanonicalFilter): Promise<MiniAppAlert> {

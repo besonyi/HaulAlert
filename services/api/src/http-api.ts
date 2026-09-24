@@ -6,6 +6,7 @@ import type {
   DashboardRepository,
   ManagedAlert
 } from "./index.js";
+import { InactiveSubscriptionError, PlanLimitExceededError } from "./entitlements.js";
 
 const maximumRequestBodyBytes = 1_000_000;
 
@@ -15,6 +16,11 @@ export interface MiniAppApiDependencies {
   readonly adminDashboard?: { getOverview(): Promise<unknown> };
   readonly adminSearch?: { search(query: string): Promise<unknown> };
   readonly brokerDirectory?: { search(query: string): Promise<unknown> };
+  readonly entitlements?: {
+    getForUser(userId: string): Promise<unknown>;
+    assertCanCreateAlert(userId: string): Promise<void>;
+    cancelAtPeriodEnd(userId: string): Promise<unknown | undefined>;
+  };
   readonly isAdmin?: (telegramUserId: string) => boolean;
   readonly authenticate: (initData: string) => AuthenticatedTelegramUser;
 }
@@ -65,6 +71,15 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       if (query.length < 2 || query.length > 80) return { statusCode: 400, body: { error: "invalid_broker_query" } };
       return { statusCode: 200, body: { brokers: await dependencies.brokerDirectory.search(query) } };
     }
+    if (pathname === "/v1/account/entitlement" && request.method === "GET") {
+      if (dependencies.entitlements === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      return { statusCode: 200, body: { entitlement: await dependencies.entitlements.getForUser(user.id) } };
+    }
+    if (pathname === "/v1/account/subscription/cancel" && request.method === "POST") {
+      if (dependencies.entitlements === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      const entitlement = await dependencies.entitlements.cancelAtPeriodEnd(user.id);
+      return entitlement === undefined ? { statusCode: 409, body: { error: "subscription_unavailable" } } : { statusCode: 200, body: { entitlement } };
+    }
     if (pathname === "/v1/dashboard" && request.method === "GET") {
       return { statusCode: 200, body: { dashboard: await dependencies.dashboard.getForUser(user.id) } };
     }
@@ -73,6 +88,7 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
     }
     if (pathname === "/v1/alerts" && request.method === "POST") {
       const body = await parseBody(request);
+      await dependencies.entitlements?.assertCanCreateAlert(user.id);
       return { statusCode: 201, body: { alert: await dependencies.alerts.create({ userId: user.id, filter: body.filter }) } };
     }
 
@@ -110,6 +126,8 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
     return { statusCode: 405, body: { error: "method_not_allowed" } };
   } catch (error: unknown) {
     if (error instanceof RequestBodyTooLargeError) return { statusCode: 413, body: { error: "body_too_large" } };
+    if (error instanceof PlanLimitExceededError) return { statusCode: 403, body: { error: "plan_limit_reached" } };
+    if (error instanceof InactiveSubscriptionError) return { statusCode: 403, body: { error: "subscription_inactive" } };
     if (error instanceof InvalidBodyError || isInputValidationError(error)) {
       return { statusCode: 400, body: { error: "invalid_body" } };
     }

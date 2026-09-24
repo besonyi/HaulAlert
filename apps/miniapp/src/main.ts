@@ -5,7 +5,8 @@ import {
   MiniAppApiError,
   type MiniAppAlert,
   type MiniAppBrokerProfile,
-  type MiniAppDashboard
+  type MiniAppDashboard,
+  type MiniAppEntitlement
 } from "./api.js";
 import { locationsFromForm } from "./location-form.js";
 import { providerListLabel, providerMonitoringSummary } from "./provider-copy.js";
@@ -34,6 +35,7 @@ applyTelegramTheme(telegram);
 
 let alerts: readonly MiniAppAlert[] = [];
 let dashboard: MiniAppDashboard | undefined;
+let entitlement: MiniAppEntitlement | undefined;
 let screen: "dashboard" | "create" = "dashboard";
 let editingAlert: MiniAppAlert | undefined;
 let blockedBrokerIds: readonly string[] = [];
@@ -47,7 +49,7 @@ void refresh();
 async function refresh(): Promise<void> {
   if (client === undefined) return render();
   try {
-    [alerts, dashboard] = await Promise.all([client.listAlerts(), client.getDashboard()]);
+    [alerts, dashboard, entitlement] = await Promise.all([client.listAlerts(), client.getDashboard(), client.getEntitlement()]);
     message = "";
   } catch (error: unknown) {
     message = readableError(error);
@@ -79,7 +81,14 @@ function dashboardMarkup(): string {
       ? `<div class="empty"><span class="empty-icon">⌁</span><h2>No alerts yet</h2><p>Create your first route and we’ll notify you when a matching load appears.</p><button class="primary" data-screen="create">Create alert</button></div>`
       : `<div class="cards">${alerts.map(alertMarkup).join("")}</div>`}
     ${recentNotificationsMarkup()}
+    ${planMarkup()}
   </section>`;
+}
+
+function planMarkup(): string {
+  if (entitlement === undefined) return "";
+  const status = entitlement.cancelAtPeriodEnd ? "Cancellation scheduled" : entitlement.subscriptionStatus === "active" ? "Active" : entitlement.subscriptionStatus;
+  return `<section class="plan"><div><strong>${escapeHtml(entitlement.planName)} plan</strong><span>${entitlement.activeAlertCount} of ${entitlement.maxActiveAlerts} active alerts · ${escapeHtml(status)}</span></div>${entitlement.subscriptionStatus === "active" && !entitlement.cancelAtPeriodEnd ? `<button class="secondary" type="button" data-cancel-subscription>Cancel at period end</button>` : ""}</section>`;
 }
 
 function recentNotificationsMarkup(): string {
@@ -208,6 +217,7 @@ function bindInteractions(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-remove-broker]").forEach((button) => {
     button.addEventListener("click", () => removeBlockedBroker(button.dataset.removeBroker));
   });
+  app.querySelector<HTMLButtonElement>("[data-cancel-subscription]")?.addEventListener("click", () => { void cancelSubscription(); });
 }
 
 function updateProviderSummary(): void {
@@ -345,6 +355,17 @@ function removeBlockedBroker(identity: string | undefined): void {
   updateBrokerUi();
 }
 
+async function cancelSubscription(): Promise<void> {
+  if (client === undefined || entitlement === undefined) return;
+  try {
+    entitlement = await client.cancelSubscription();
+    message = "Your plan will end at the close of its current period.";
+  } catch (error: unknown) {
+    message = readableError(error);
+  }
+  render();
+}
+
 function updateBrokerUi(): void {
   const blocks = app.querySelector<HTMLElement>("[data-broker-blocks]");
   const results = app.querySelector<HTMLElement>("[data-broker-results]");
@@ -436,6 +457,8 @@ function shortLocation(location: { readonly city: string | null; readonly state:
 
 function readableError(error: unknown): string {
   if (error instanceof MiniAppApiError && error.statusCode === 401) return "Telegram session expired. Close and reopen HaulAlert.";
+  if (error instanceof MiniAppApiError && error.code === "plan_limit_reached") return "Your plan has reached its active-alert limit.";
+  if (error instanceof MiniAppApiError && error.code === "subscription_inactive") return "Your subscription is no longer active.";
   if (error instanceof Error) return error.message;
   return "Something went wrong. Please try again.";
 }
