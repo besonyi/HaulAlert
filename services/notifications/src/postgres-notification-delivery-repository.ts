@@ -115,12 +115,31 @@ export class PostgresNotificationDeliveryRepository implements DurableNotificati
     if (!Number.isInteger(limit) || limit < 1) throw new Error("limit must be a positive integer");
 
     const result = await this.database.query(
-      `WITH candidates AS (
-        SELECT id
-        FROM notification_deliveries
-        WHERE status IN ('queued', 'retry_scheduled')
-          AND available_at <= $1::timestamptz
-        ORDER BY available_at, created_at
+      `WITH cancelled AS (
+        UPDATE notification_deliveries AS delivery
+        SET status = 'cancelled',
+          claimed_at = NULL,
+          last_error = CASE
+            WHEN alert.status <> 'active' THEN 'Alert is no longer active'
+            ELSE 'Telegram chat is unavailable'
+          END,
+          updated_at = $1::timestamptz
+        FROM alerts AS alert, users AS user_account
+        WHERE delivery.alert_id = alert.id
+          AND delivery.user_id = user_account.id
+          AND delivery.status IN ('queued', 'retry_scheduled')
+          AND (alert.status <> 'active' OR user_account.telegram_chat_id IS NULL)
+        RETURNING delivery.id
+      ), candidates AS (
+        SELECT delivery.id
+        FROM notification_deliveries AS delivery
+        INNER JOIN alerts AS alert ON alert.id = delivery.alert_id
+        INNER JOIN users AS user_account ON user_account.id = delivery.user_id
+        WHERE delivery.status IN ('queued', 'retry_scheduled')
+          AND delivery.available_at <= $1::timestamptz
+          AND alert.status = 'active'
+          AND user_account.telegram_chat_id IS NOT NULL
+        ORDER BY delivery.available_at, delivery.created_at
         FOR UPDATE SKIP LOCKED
         LIMIT $2
       ), claimed AS (

@@ -55,18 +55,22 @@ describe("PostgreSQL notification delivery repository", () => {
   });
 
   it("claims ready jobs with SKIP LOCKED and rebuilds a safe alert match", async () => {
+    let statement = "";
     const database: SqlExecutor = {
-      query: async () => ({
-        rows: [{
-          id: "44444444-4444-4444-8444-444444444444",
-          delivery_key: "central-dispatch:829181:alert:user",
-          attempt_count: 1,
-          alert_id: match.alertId,
-          user_id: match.userId,
-          telegram_chat_id: 123456,
-          normalized_load: match.load
-        }]
-      })
+      query: async (captured) => {
+        statement = captured;
+        return {
+          rows: [{
+            id: "44444444-4444-4444-8444-444444444444",
+            delivery_key: "central-dispatch:829181:alert:user",
+            attempt_count: 1,
+            alert_id: match.alertId,
+            user_id: match.userId,
+            telegram_chat_id: 123456,
+            normalized_load: match.load
+          }]
+        };
+      }
     };
     const repository = new PostgresNotificationDeliveryRepository(database);
 
@@ -74,6 +78,10 @@ describe("PostgreSQL notification delivery repository", () => {
 
     assert.equal(deliveries[0]?.match.telegramChatId, "123456");
     assert.equal(deliveries[0]?.match.load.providerLoadId, "829181");
+    assert.match(statement, /status = 'cancelled'/);
+    assert.match(statement, /Alert is no longer active/);
+    assert.match(statement, /alert.status = 'active'/);
+    assert.match(statement, /FOR UPDATE SKIP LOCKED/);
   });
 
   it("reclaims expired worker leases and records their recovered attempts", async () => {
