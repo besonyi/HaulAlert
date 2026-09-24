@@ -18,6 +18,9 @@
     "test": "node --test dist/*.test.js"
   },
   "dependencies": {
+    "@haulalert/adapter-central-dispatch": "workspace:*",
+    "@haulalert/adapter-shipcars": "workspace:*",
+    "@haulalert/adapter-super-dispatch": "workspace:*",
     "@haulalert/browser-runtime-core": "workspace:*",
     "@haulalert/filter-compiler": "workspace:*",
     "@haulalert/load-model": "workspace:*",

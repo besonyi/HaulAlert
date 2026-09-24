@@ -184,9 +184,15 @@ importers:
 
   adapters/shipcars:
     dependencies:
+      '@haulalert/canonical-filter':
+        specifier: workspace:*
+        version: link:../../packages/canonical-filter
       '@haulalert/filter-compiler':
         specifier: workspace:*
         version: link:../../packages/filter-compiler
+      '@haulalert/load-model':
+        specifier: workspace:*
+        version: link:../../packages/load-model
 
   adapters/super-dispatch:
     dependencies:
@@ -296,6 +302,15 @@ importers:
 
   services/browser-runtime:
     dependencies:
+      '@haulalert/adapter-central-dispatch':
+        specifier: workspace:*
+        version: link:../../adapters/central-dispatch
+      '@haulalert/adapter-shipcars':
+        specifier: workspace:*
+        version: link:../../adapters/shipcars
+      '@haulalert/adapter-super-dispatch':
+        specifier: workspace:*
+        version: link:../../adapters/super-dispatch
       '@haulalert/browser-runtime-core':
         specifier: workspace:*
         version: link:../../packages/browser-runtime-core

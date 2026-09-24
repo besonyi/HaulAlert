@@ -4,7 +4,11 @@ import {
   type PersistentSearchTab,
   type SearchTabReservation
 } from "@haulalert/browser-runtime-core";
+import { normalizeCentralDispatchSearchResponse } from "@haulalert/adapter-central-dispatch";
+import { normalizeShipCarsSearchResponse } from "@haulalert/adapter-shipcars";
+import { normalizeSuperDispatchSearchResponse } from "@haulalert/adapter-super-dispatch";
 import type { CompiledProviderFilter, SourceFilter } from "@haulalert/filter-compiler";
+import type { NormalizedLoad } from "@haulalert/load-model";
 import type { NewLoadScanResult, OrderedLoadScan } from "@haulalert/new-load-detector";
 
 export interface ProviderSearchConfiguration {
@@ -91,6 +95,46 @@ export interface SessionBackedProviderAdapter {
   scan(input: Omit<ProviderSearchScan, "provider">): Promise<OrderedLoadScan>;
 }
 
+/** A raw provider response plus the source's indication that its window was capped. */
+export interface ProviderSearchPage {
+  readonly payload: unknown;
+  readonly isTruncated: boolean;
+}
+
+/** Opaque browser/session transport; provider cookies and credentials stay behind it. */
+export interface ProviderSessionSearchClient {
+  configureSearch(input: Omit<ProviderSearchConfiguration, "provider">): Promise<void>;
+  fetchSearch(input: Omit<ProviderSearchScan, "provider">): Promise<ProviderSearchPage>;
+}
+
+export type ProviderResponseNormalizer = (payload: unknown) => readonly NormalizedLoad[];
+
+/**
+ * Adapts a provider-specific raw response normalizer to the shared scan
+ * contract. Browser implementations own session I/O; adapter packages own
+ * response interpretation, keeping credentials out of both layers.
+ */
+export class NormalizingSessionProviderAdapter implements SessionBackedProviderAdapter {
+  public constructor(
+    public readonly provider: CompiledProviderFilter["provider"],
+    private readonly client: ProviderSessionSearchClient,
+    private readonly normalize: ProviderResponseNormalizer
+  ) {}
+
+  public async configureSearch(input: Omit<ProviderSearchConfiguration, "provider">): Promise<void> {
+    await this.client.configureSearch(input);
+  }
+
+  public async scan(input: Omit<ProviderSearchScan, "provider">): Promise<OrderedLoadScan> {
+    const page = await this.client.fetchSearch(input);
+    return {
+      searchId: `${this.provider}:${input.sourceFilterHash}`,
+      loads: this.normalize(page.payload),
+      isTruncated: page.isTruncated
+    };
+  }
+}
+
 export class UnknownProviderAdapterError extends Error {
   public constructor(provider: CompiledProviderFilter["provider"]) {
     super(`No session-backed adapter is configured for provider: ${provider}`);
@@ -130,6 +174,44 @@ export class SessionSearchGateway implements ProviderSearchDriver, ProviderSearc
     if (adapter === undefined) throw new UnknownProviderAdapterError(provider);
     return adapter;
   }
+}
+
+/** One opaque authenticated-session port per supported provider. */
+export type ProviderSessionSearchClients = Readonly<Record<
+  CompiledProviderFilter["provider"],
+  ProviderSessionSearchClient
+>>;
+
+/**
+ * Wires provider-owned response parsers into the session gateway. This is the
+ * only runtime composition layer that imports all provider adapters.
+ */
+export function createHaulAlertSessionAdapters(
+  clients: ProviderSessionSearchClients
+): readonly SessionBackedProviderAdapter[] {
+  return [
+    new NormalizingSessionProviderAdapter(
+      "central-dispatch",
+      clients["central-dispatch"],
+      normalizeCentralDispatchSearchResponse
+    ),
+    new NormalizingSessionProviderAdapter(
+      "super-dispatch",
+      clients["super-dispatch"],
+      normalizeSuperDispatchSearchResponse
+    ),
+    new NormalizingSessionProviderAdapter(
+      "shipcars",
+      clients.shipcars,
+      normalizeShipCarsSearchResponse
+    )
+  ];
+}
+
+export function createHaulAlertSessionSearchGateway(
+  clients: ProviderSessionSearchClients
+): SessionSearchGateway {
+  return new SessionSearchGateway(createHaulAlertSessionAdapters(clients));
 }
 
 export interface ScanProcessor {

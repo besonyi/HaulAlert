@@ -10,3 +10,6 @@ coverage/
 # Generated browser-session and local runtime state must never be committed.
 runtime-data/
 sessions/
+
+# Local codebase-memory index cache. It is regenerated per workspace.
+.codebase-memory/

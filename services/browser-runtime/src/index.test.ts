@@ -8,9 +8,12 @@ import type { NormalizedLoad } from "@haulalert/load-model";
 import {
   BrowserRuntimeOrchestrator,
   BrowserScanCoordinator,
+  createHaulAlertSessionSearchGateway,
+  NormalizingSessionProviderAdapter,
   SessionSearchGateway,
   UnknownProviderAdapterError,
   type ProviderSearchDriver,
+  type ProviderSessionSearchClient,
   type ProviderSearchScanner,
   type ScanHistoryRecorder,
   type ScanProcessor,
@@ -110,6 +113,102 @@ describe("session search gateway", () => {
       }),
       UnknownProviderAdapterError
     );
+  });
+});
+
+describe("normalizing session provider adapter", () => {
+  it("turns an opaque provider page into an ordered scan without exposing session state", async () => {
+    const configurations: unknown[] = [];
+    const fetches: unknown[] = [];
+    const client: ProviderSessionSearchClient = {
+      configureSearch: async (input) => { configurations.push(input); },
+      fetchSearch: async (input) => {
+        fetches.push(input);
+        return { payload: { listings: ["row-1"] }, isTruncated: true };
+      }
+    };
+    const normalized: NormalizedLoad[] = [{
+      provider: "central-dispatch",
+      providerLoadId: "row-1",
+      pickup: { city: null, state: null, postalCode: null, coordinates: null },
+      delivery: { city: null, state: null, postalCode: null, coordinates: null },
+      vehicleCount: 1,
+      trailerType: "unknown",
+      payUsd: null,
+      distanceMiles: null,
+      ratePerMile: null,
+      readyAt: null,
+      postedAt: null,
+      sourceUrl: null,
+      broker: null
+    }];
+    const adapter = new NormalizingSessionProviderAdapter(
+      "central-dispatch",
+      client,
+      (payload) => payload === undefined ? [] : normalized
+    );
+    const input = { sessionId: "session-1", tabId: "tab-1", sourceFilterHash: "source-hash" };
+    const configuration: Parameters<ProviderSessionSearchClient["configureSearch"]>[0] = {
+      sessionId: "session-1",
+      tabId: "tab-1",
+      sourceFilter: { trailerTypes: ["open"] }
+    };
+
+    await adapter.configureSearch(configuration);
+    const scan = await adapter.scan(input);
+
+    assert.deepEqual(configurations, [configuration]);
+    assert.deepEqual(fetches, [input]);
+    assert.deepEqual(scan, {
+      searchId: "central-dispatch:source-hash",
+      loads: normalized,
+      isTruncated: true
+    });
+  });
+});
+
+describe("HaulAlert session adapter composition", () => {
+  it("registers every provider normalizer behind opaque session clients", async () => {
+    const configurations: string[] = [];
+    const client = (payload: unknown, isTruncated: boolean): ProviderSessionSearchClient => ({
+      configureSearch: async () => { configurations.push("configured"); },
+      fetchSearch: async () => ({ payload, isTruncated })
+    });
+    const gateway = createHaulAlertSessionSearchGateway({
+      "central-dispatch": client({ items: [{ id: "central-1" }] }, false),
+      "super-dispatch": client({ data: [{ load: { guid: "super-1" } }] }, true),
+      shipcars: client({ results: [{ id: "shipcars-1" }] }, false)
+    });
+    const scanInput = (provider: CompiledProviderFilter["provider"]) => ({
+      sessionId: "session-1",
+      tabId: "tab-1",
+      provider,
+      sourceFilterHash: "source-hash"
+    });
+
+    await gateway.configureSearch({
+      sessionId: "session-1",
+      tabId: "tab-1",
+      provider: "central-dispatch",
+      sourceFilter: { trailerTypes: ["open"] }
+    });
+    const [central, superDispatch, shipCars] = await Promise.all([
+      gateway.scan(scanInput("central-dispatch")),
+      gateway.scan(scanInput("super-dispatch")),
+      gateway.scan(scanInput("shipcars"))
+    ]);
+
+    assert.deepEqual(configurations, ["configured"]);
+    assert.deepEqual(central.loads.map(({ provider, providerLoadId }) => [provider, providerLoadId]), [
+      ["central-dispatch", "central-1"]
+    ]);
+    assert.deepEqual(superDispatch.loads.map(({ provider, providerLoadId }) => [provider, providerLoadId]), [
+      ["super-dispatch", "super-1"]
+    ]);
+    assert.deepEqual(shipCars.loads.map(({ provider, providerLoadId }) => [provider, providerLoadId]), [
+      ["shipcars", "shipcars-1"]
+    ]);
+    assert.equal(superDispatch.isTruncated, true);
   });
 });
 
