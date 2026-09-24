@@ -23,10 +23,16 @@ export interface ClaimedNotificationDelivery {
 }
 
 export interface DurableNotificationDeliveryRepository {
+  reclaimExpiredClaims(leaseDurationMs: number, maximumAttempts: number, now?: Date): Promise<ClaimLeaseRecovery>;
   claimDue(limit: number, now?: Date): Promise<readonly ClaimedNotificationDelivery[]>;
   markSent(deliveryId: string, telegramMessageId: string | null, now?: Date): Promise<boolean>;
   scheduleRetry(deliveryId: string, errorMessage: string, availableAt: Date, now?: Date): Promise<boolean>;
   markDeadLetter(deliveryId: string, errorMessage: string, now?: Date): Promise<boolean>;
+}
+
+export interface ClaimLeaseRecovery {
+  readonly retryScheduled: number;
+  readonly deadLettered: number;
 }
 
 export type DurableDeliveryEnqueueResult =
@@ -59,6 +65,50 @@ export class PostgresNotificationDeliveryRepository implements DurableNotificati
     return deliveryId === undefined
       ? { status: "duplicate", deliveryKey }
       : { status: "queued", deliveryId, deliveryKey };
+  }
+
+  /** Reclaims deliveries left in-progress by a terminated worker process. */
+  public async reclaimExpiredClaims(
+    leaseDurationMs: number,
+    maximumAttempts: number,
+    now: Date = new Date()
+  ): Promise<ClaimLeaseRecovery> {
+    if (!Number.isFinite(leaseDurationMs) || leaseDurationMs < 1) {
+      throw new Error("leaseDurationMs must be a positive number");
+    }
+    if (!Number.isInteger(maximumAttempts) || maximumAttempts < 1) {
+      throw new Error("maximumAttempts must be a positive integer");
+    }
+    const result = await this.database.query(
+      `WITH reclaimed AS (
+        UPDATE notification_deliveries
+        SET attempt_count = attempt_count + 1,
+          status = CASE WHEN attempt_count + 1 >= $3 THEN 'dead_letter' ELSE 'retry_scheduled' END,
+          available_at = $1::timestamptz,
+          claimed_at = NULL,
+          last_error = 'Delivery claim lease expired',
+          updated_at = $1::timestamptz
+        WHERE status = 'delivering'
+          AND claimed_at < $1::timestamptz - ($2::bigint * interval '1 millisecond')
+        RETURNING id, attempt_count, status
+      ), recorded AS (
+        INSERT INTO notification_attempts (delivery_id, attempt_number, outcome, error_message)
+        SELECT id, attempt_count,
+          CASE WHEN status = 'dead_letter' THEN 'dead_letter' ELSE 'failed' END,
+          'Delivery claim lease expired'
+        FROM reclaimed
+      )
+      SELECT
+        count(*) FILTER (WHERE status = 'retry_scheduled') AS retry_scheduled_count,
+        count(*) FILTER (WHERE status = 'dead_letter') AS dead_letter_count
+      FROM reclaimed`,
+      [now.toISOString(), Math.round(leaseDurationMs), maximumAttempts]
+    );
+    const row = result.rows[0];
+    return {
+      retryScheduled: parseCount(row?.retry_scheduled_count, "retry_scheduled_count"),
+      deadLettered: parseCount(row?.dead_letter_count, "dead_letter_count")
+    };
   }
 
   public async claimDue(limit: number, now: Date = new Date()): Promise<readonly ClaimedNotificationDelivery[]> {
@@ -210,4 +260,10 @@ function toClaimedDelivery(row: ClaimedDeliveryRow): ClaimedNotificationDelivery
 
 function getString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function parseCount(value: unknown, field: string): number {
+  const count = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(count) || count < 0) throw new Error(`Expected ${field} from PostgreSQL`);
+  return count;
 }

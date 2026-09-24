@@ -36,11 +36,17 @@ class FakeRepository implements DurableNotificationDeliveryRepository {
   public markedSent: string[] = [];
   public retries: { deliveryId: string; nextAttemptAt: Date }[] = [];
   public deadLetters: string[] = [];
+  public leaseRecoveryCalls: { leaseDurationMs: number; maximumAttempts: number; now: Date | undefined }[] = [];
 
   public constructor(private readonly deliveries: readonly ClaimedNotificationDelivery[]) {}
 
   public async claimDue(): Promise<readonly ClaimedNotificationDelivery[]> {
     return this.deliveries;
+  }
+
+  public async reclaimExpiredClaims(leaseDurationMs: number, maximumAttempts: number, now?: Date) {
+    this.leaseRecoveryCalls.push({ leaseDurationMs, maximumAttempts, now });
+    return { retryScheduled: 0, deadLettered: 0 };
   }
 
   public async markSent(deliveryId: string): Promise<boolean> {
@@ -75,6 +81,7 @@ describe("PostgreSQL notification worker", () => {
     assert.deepEqual(await worker.processBatch(10, { now }), [{ status: "sent", deliveryId: "delivery-1" }]);
     assert.deepEqual(recipients, ["telegram-1"]);
     assert.deepEqual(repository.markedSent, ["delivery-1"]);
+    assert.deepEqual(repository.leaseRecoveryCalls, [{ leaseDurationMs: 300_000, maximumAttempts: 3, now }]);
   });
 
   it("schedules a Telegram rate-limit retry using the server delay", async () => {

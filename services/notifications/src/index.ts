@@ -99,6 +99,7 @@ export {
 export {
   PostgresNotificationDeliveryRepository,
   type ClaimedNotificationDelivery,
+  type ClaimLeaseRecovery,
   type DurableDeliveryEnqueueResult,
   type DurableNotificationDeliveryEnqueuer,
   type DurableNotificationDeliveryRepository,

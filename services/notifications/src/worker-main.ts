@@ -15,6 +15,7 @@ export interface NotificationWorkerRuntimeConfig {
   readonly pollIntervalMs: number;
   readonly maximumAttempts: number;
   readonly initialRetryDelayMs: number;
+  readonly claimLeaseDurationMs: number;
 }
 
 export function getNotificationWorkerRuntimeConfig(
@@ -38,6 +39,11 @@ export function getNotificationWorkerRuntimeConfig(
       environment.NOTIFICATION_WORKER_INITIAL_RETRY_DELAY_MS,
       5_000,
       "NOTIFICATION_WORKER_INITIAL_RETRY_DELAY_MS"
+    ),
+    claimLeaseDurationMs: getPositiveInteger(
+      environment.NOTIFICATION_WORKER_CLAIM_LEASE_DURATION_MS,
+      300_000,
+      "NOTIFICATION_WORKER_CLAIM_LEASE_DURATION_MS"
     )
   };
 }
@@ -53,7 +59,8 @@ export async function runNotificationWorker(
     new TelegramBotApiTransport(config.telegramBotToken),
     {
       maximumAttempts: config.maximumAttempts,
-      initialRetryDelayMs: config.initialRetryDelayMs
+      initialRetryDelayMs: config.initialRetryDelayMs,
+      claimLeaseDurationMs: config.claimLeaseDurationMs
     }
   );
   let activeCycle: Promise<void> | undefined;

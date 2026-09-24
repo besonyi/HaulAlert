@@ -10,6 +10,7 @@ import { TelegramRateLimitError } from "./telegram-bot-api-transport.js";
 export interface DurableWorkerRetryPolicy {
   readonly maximumAttempts: number;
   readonly initialRetryDelayMs: number;
+  readonly claimLeaseDurationMs: number;
 }
 
 export interface DurableWorkerOptions {
@@ -25,7 +26,8 @@ export type DurableWorkerOutcome =
 
 const defaultRetryPolicy: DurableWorkerRetryPolicy = {
   maximumAttempts: 3,
-  initialRetryDelayMs: 5_000
+  initialRetryDelayMs: 5_000,
+  claimLeaseDurationMs: 300_000
 };
 
 /** Runs durable PostgreSQL delivery jobs without re-sending a lost claim. */
@@ -44,6 +46,9 @@ export class PostgresNotificationWorker {
     if (!Number.isFinite(this.retryPolicy.initialRetryDelayMs) || this.retryPolicy.initialRetryDelayMs < 0) {
       throw new Error("initialRetryDelayMs must be a non-negative number");
     }
+    if (!Number.isFinite(this.retryPolicy.claimLeaseDurationMs) || this.retryPolicy.claimLeaseDurationMs < 1) {
+      throw new Error("claimLeaseDurationMs must be a positive number");
+    }
   }
 
   public async processBatch(
@@ -51,6 +56,11 @@ export class PostgresNotificationWorker {
     options: DurableWorkerOptions = {}
   ): Promise<readonly DurableWorkerOutcome[]> {
     const now = options.now ?? new Date();
+    await this.repository.reclaimExpiredClaims(
+      this.retryPolicy.claimLeaseDurationMs,
+      this.retryPolicy.maximumAttempts,
+      now
+    );
     const deliveries = await this.repository.claimDue(limit, now);
     const outcomes: DurableWorkerOutcome[] = [];
 

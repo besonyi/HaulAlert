@@ -16,7 +16,8 @@ describe("notification worker runtime config", () => {
       batchSize: 25,
       pollIntervalMs: 1_000,
       maximumAttempts: 3,
-      initialRetryDelayMs: 5_000
+      initialRetryDelayMs: 5_000,
+      claimLeaseDurationMs: 300_000
     });
   });
 
@@ -26,19 +27,22 @@ describe("notification worker runtime config", () => {
       NOTIFICATION_WORKER_BATCH_SIZE: "10",
       NOTIFICATION_WORKER_POLL_INTERVAL_MS: "250",
       NOTIFICATION_WORKER_MAXIMUM_ATTEMPTS: "5",
-      NOTIFICATION_WORKER_INITIAL_RETRY_DELAY_MS: "750"
+      NOTIFICATION_WORKER_INITIAL_RETRY_DELAY_MS: "750",
+      NOTIFICATION_WORKER_CLAIM_LEASE_DURATION_MS: "60000"
     });
 
     assert.deepEqual({
       batchSize: config.batchSize,
       pollIntervalMs: config.pollIntervalMs,
       maximumAttempts: config.maximumAttempts,
-      initialRetryDelayMs: config.initialRetryDelayMs
+      initialRetryDelayMs: config.initialRetryDelayMs,
+      claimLeaseDurationMs: config.claimLeaseDurationMs
     }, {
       batchSize: 10,
       pollIntervalMs: 250,
       maximumAttempts: 5,
-      initialRetryDelayMs: 750
+      initialRetryDelayMs: 750,
+      claimLeaseDurationMs: 60_000
     });
   });
 

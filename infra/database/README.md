@@ -6,6 +6,7 @@ Set `DATABASE_URL` in a local `.env` file, then apply migrations in lexical orde
 
 ```bash
 psql "$DATABASE_URL" -f infra/database/migrations/0001_initial.sql
+psql "$DATABASE_URL" -f infra/database/migrations/0002_notification_delivery_claim_lease.sql
 ```
 
 The application must use three transactional patterns:
@@ -15,3 +16,5 @@ The application must use three transactional patterns:
 3. Workers claim ready deliveries in small batches with `FOR UPDATE SKIP LOCKED`, move them to `delivering`, and record every attempt. This prevents two workers from sending the same alert.
 
 Failed deliveries move to `retry_scheduled` with `available_at` set to their next retry time. Exhausted jobs move to `dead_letter` and retain their error history in `notification_attempts`.
+
+Workers also lease claimed deliveries. On startup, a worker reclaims expired `delivering` leases, records a failed attempt, and either retries or dead-letters the job once its attempt limit is reached.

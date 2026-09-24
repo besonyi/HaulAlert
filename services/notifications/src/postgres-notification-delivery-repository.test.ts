@@ -76,6 +76,25 @@ describe("PostgreSQL notification delivery repository", () => {
     assert.equal(deliveries[0]?.match.load.providerLoadId, "829181");
   });
 
+  it("reclaims expired worker leases and records their recovered attempts", async () => {
+    let captured: { statement: string; parameters: readonly unknown[] } | undefined;
+    const database: SqlExecutor = {
+      query: async (statement, parameters) => {
+        captured = { statement, parameters };
+        return { rows: [{ retry_scheduled_count: "2", dead_letter_count: "1" }] };
+      }
+    };
+    const repository = new PostgresNotificationDeliveryRepository(database);
+
+    const recovered = await repository.reclaimExpiredClaims(60_000, 3, new Date("2026-09-23T12:00:00.000Z"));
+
+    assert.deepEqual(recovered, { retryScheduled: 2, deadLettered: 1 });
+    assert.match(captured?.statement ?? "", /status = 'delivering'/);
+    assert.match(captured?.statement ?? "", /Delivery claim lease expired/);
+    assert.match(captured?.statement ?? "", /notification_attempts/);
+    assert.deepEqual(captured?.parameters, ["2026-09-23T12:00:00.000Z", 60_000, 3]);
+  });
+
   it("records a successful transition only from the claimed state", async () => {
     let capturedStatement = "";
     const database: SqlExecutor = {
