@@ -5,7 +5,7 @@ export interface OperationalCount {
   readonly count: number;
 }
 
-/** Credential-free operational summary. This repository deliberately has no HTTP route; P8.7 will add admin authorization. */
+/** Credential-free operational summary exposed only through the Telegram allowlisted admin route. */
 export interface AdminSystemOverview {
   readonly users: number;
   readonly activeAlerts: number;

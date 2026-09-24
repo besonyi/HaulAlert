@@ -131,7 +131,7 @@ LoadBoard search
 
 **Goal:** provide the internal controls and customer account capabilities needed to operate the service.
 
-- [ ] **P8.1** Build the admin dashboard for system health, active sessions, tabs, loads, alerts, and delivery outcomes.
+- [x] **P8.1** Build the admin dashboard for system health, active sessions, tabs, loads, alerts, and delivery outcomes.
 - [ ] **P8.2** Provide operator views for session and tab errors with actionable recovery controls.
 - [ ] **P8.3** Add searchable administration for users, filters, normalized loads, and alert history.
 - [ ] **P8.4** Build broker profiles, broker search, and customer-managed blocked-broker lists.
