@@ -17,6 +17,14 @@ export { InactiveSubscriptionError, PlanLimitExceededError, PostgresEntitlementR
 export { PostgresReferralRepository, type ReferralSummary } from "./referrals.js";
 export { PostgresPartnerAccountRepository, type PartnerAccount, type PartnerRewardMode, type PartnerStatus } from "./partner-accounts.js";
 export {
+  PostgresSubscriptionCheckoutService,
+  StripeCheckoutClient,
+  StripeCheckoutUnavailableError,
+  SubscriptionAlreadyEssentialError,
+  type StripeCheckoutConfig,
+  type StripeCheckoutSession
+} from "./stripe-billing.js";
+export {
   InvalidStripeWebhookPayloadError,
   InvalidStripeWebhookSignatureError,
   PostgresStripeWebhookEventProcessor,

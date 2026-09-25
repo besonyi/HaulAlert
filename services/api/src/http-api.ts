@@ -7,6 +7,7 @@ import type {
   ManagedAlert
 } from "./index.js";
 import { InactiveSubscriptionError, PlanLimitExceededError } from "./entitlements.js";
+import { StripeCheckoutUnavailableError, SubscriptionAlreadyEssentialError } from "./stripe-billing.js";
 import { InvalidStripeWebhookPayloadError, InvalidStripeWebhookSignatureError } from "./stripe-webhook.js";
 
 type AuthenticatedApiUser = AuthenticatedTelegramUser & { readonly telegramUserId?: string };
@@ -29,6 +30,9 @@ export interface MiniAppApiDependencies {
   };
   readonly partners?: {
     approve(userId: string): Promise<unknown | undefined>;
+  };
+  readonly billing?: {
+    createEssentialCheckout(userId: string): Promise<{ readonly url: string }>;
   };
   readonly stripeWebhook?: {
     handle(payload: Buffer, signatureHeader: string | undefined): Promise<unknown>;
@@ -114,6 +118,10 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       const entitlement = await dependencies.entitlements.cancelAtPeriodEnd(user.id);
       return entitlement === undefined ? { statusCode: 409, body: { error: "subscription_unavailable" } } : { statusCode: 200, body: { entitlement } };
     }
+    if (pathname === "/v1/account/subscription/checkout" && request.method === "POST") {
+      if (dependencies.billing === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      return { statusCode: 201, body: { checkout: await dependencies.billing.createEssentialCheckout(user.id) } };
+    }
     if (pathname === "/v1/referrals" && request.method === "GET") {
       if (dependencies.referrals === undefined) return { statusCode: 404, body: { error: "not_found" } };
       return { statusCode: 200, body: { referral: await dependencies.referrals.getForUser(user.id) } };
@@ -166,6 +174,8 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
     if (error instanceof RequestBodyTooLargeError) return { statusCode: 413, body: { error: "body_too_large" } };
     if (error instanceof PlanLimitExceededError) return { statusCode: 403, body: { error: "plan_limit_reached" } };
     if (error instanceof InactiveSubscriptionError) return { statusCode: 403, body: { error: "subscription_inactive" } };
+    if (error instanceof SubscriptionAlreadyEssentialError) return { statusCode: 409, body: { error: "already_essential" } };
+    if (error instanceof StripeCheckoutUnavailableError) return { statusCode: 503, body: { error: "billing_unavailable" } };
     if (error instanceof InvalidBodyError || isInputValidationError(error)) {
       return { statusCode: 400, body: { error: "invalid_body" } };
     }

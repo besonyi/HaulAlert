@@ -93,7 +93,10 @@ function dashboardMarkup(): string {
 function planMarkup(): string {
   if (entitlement === undefined) return "";
   const status = entitlement.cancelAtPeriodEnd ? "Cancellation scheduled" : entitlement.subscriptionStatus === "active" ? "Active" : entitlement.subscriptionStatus;
-  return `<section class="plan"><div><strong>${escapeHtml(entitlement.planName)} plan</strong><span>${entitlement.activeAlertCount} of ${entitlement.maxActiveAlerts} active alerts · ${escapeHtml(status)}</span></div>${entitlement.subscriptionStatus === "active" && !entitlement.cancelAtPeriodEnd ? `<button class="secondary" type="button" data-cancel-subscription>Cancel at period end</button>` : ""}</section>`;
+  const action = entitlement.planId === "free"
+    ? `<button class="primary" type="button" data-upgrade-essential>Upgrade to Essential · $25/mo</button>`
+    : entitlement.subscriptionStatus === "active" && !entitlement.cancelAtPeriodEnd ? `<button class="secondary" type="button" data-cancel-subscription>Cancel at period end</button>` : "";
+  return `<section class="plan"><div><strong>${escapeHtml(entitlement.planName)} plan</strong><span>${entitlement.activeAlertCount} of ${entitlement.maxActiveAlerts} active alerts · ${escapeHtml(status)}</span></div>${action}</section>`;
 }
 
 function referralMarkup(): string {
@@ -242,6 +245,7 @@ function bindInteractions(): void {
     button.addEventListener("click", () => removeBlockedBroker(button.dataset.removeBroker));
   });
   app.querySelector<HTMLButtonElement>("[data-cancel-subscription]")?.addEventListener("click", () => { void cancelSubscription(); });
+  app.querySelector<HTMLButtonElement>("[data-upgrade-essential]")?.addEventListener("click", () => { void upgradeToEssential(); });
   app.querySelector<HTMLButtonElement>("[data-copy-referral]")?.addEventListener("click", () => { void copyReferralLink(); });
 }
 
@@ -391,6 +395,17 @@ async function cancelSubscription(): Promise<void> {
   render();
 }
 
+async function upgradeToEssential(): Promise<void> {
+  if (client === undefined) return;
+  try {
+    const checkout = await client.createEssentialCheckout();
+    window.location.assign(checkout.url);
+  } catch (error: unknown) {
+    message = readableError(error);
+    render();
+  }
+}
+
 async function copyReferralLink(): Promise<void> {
   if (referral === undefined) return;
   try {
@@ -495,6 +510,8 @@ function readableError(error: unknown): string {
   if (error instanceof MiniAppApiError && error.statusCode === 401) return "Telegram session expired. Close and reopen HaulAlert.";
   if (error instanceof MiniAppApiError && error.code === "plan_limit_reached") return "Your plan has reached its active-alert limit.";
   if (error instanceof MiniAppApiError && error.code === "subscription_inactive") return "Your subscription is no longer active.";
+  if (error instanceof MiniAppApiError && error.code === "billing_unavailable") return "Billing is not available yet. Please try again later.";
+  if (error instanceof MiniAppApiError && error.code === "already_essential") return "Your Essential plan is already active.";
   if (error instanceof Error) return error.message;
   return "Something went wrong. Please try again.";
 }

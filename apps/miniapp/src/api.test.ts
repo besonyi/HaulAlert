@@ -86,3 +86,15 @@ test("Mini App API client reads the signed-in user's referral summary", async ()
   assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
   assert.equal(referral.code, "A7K92D4F");
 });
+
+test("Mini App API client starts Essential checkout with the Telegram authorization", async () => {
+  let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
+  const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {
+    captured = { input, ...(init === undefined ? {} : { init }) };
+    return new Response(JSON.stringify({ checkout: { url: "https://checkout.stripe.com/c/pay/test" } }), { status: 201 });
+  });
+  assert.equal((await client.createEssentialCheckout()).url, "https://checkout.stripe.com/c/pay/test");
+  assert.equal(captured?.input, "/api/v1/account/subscription/checkout");
+  assert.equal(captured?.init?.method, "POST");
+  assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
+});

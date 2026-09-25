@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresTelegramUserResolver, StripeWebhookHandler, type ReferralSummary } from "./index.js";
+import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
@@ -16,6 +16,7 @@ export interface ApiServerConfig {
   readonly adminTelegramUserIds: readonly string[];
   readonly telegramBotUsername: string;
   readonly stripeWebhookSecret: string | undefined;
+  readonly stripeCheckout: StripeCheckoutConfig | undefined;
 }
 
 export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env): ApiServerConfig {
@@ -25,7 +26,8 @@ export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env)
     port: getPort(environment.API_PORT),
     adminTelegramUserIds: getAdminTelegramUserIds(environment.ADMIN_TELEGRAM_USER_IDS),
     telegramBotUsername: getTelegramBotUsername(environment.TELEGRAM_BOT_USERNAME),
-    stripeWebhookSecret: optionalStripeWebhookSecret(environment.STRIPE_WEBHOOK_SECRET)
+    stripeWebhookSecret: optionalStripeWebhookSecret(environment.STRIPE_WEBHOOK_SECRET),
+    stripeCheckout: optionalStripeCheckoutConfig(environment)
   };
 }
 
@@ -50,6 +52,9 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
       )
     },
     partners,
+    ...(config.stripeCheckout === undefined ? {} : {
+      billing: new PostgresSubscriptionCheckoutService(database, new StripeCheckoutClient(config.stripeCheckout))
+    }),
     ...(config.stripeWebhookSecret === undefined ? {} : {
       stripeWebhook: new StripeWebhookHandler(config.stripeWebhookSecret, new PostgresStripeWebhookEventProcessor(database))
     }),
@@ -96,6 +101,29 @@ export function optionalStripeWebhookSecret(value: string | undefined): string |
     throw new Error("STRIPE_WEBHOOK_SECRET must be a Stripe webhook endpoint secret");
   }
   return secret;
+}
+
+export function optionalStripeCheckoutConfig(environment: NodeJS.ProcessEnv): StripeCheckoutConfig | undefined {
+  const secretKey = environment.STRIPE_SECRET_KEY?.trim();
+  const essentialPriceId = environment.STRIPE_ESSENTIAL_PRICE_ID?.trim();
+  const successUrl = environment.STRIPE_CHECKOUT_SUCCESS_URL?.trim();
+  const cancelUrl = environment.STRIPE_CHECKOUT_CANCEL_URL?.trim();
+  if ([secretKey, essentialPriceId, successUrl, cancelUrl].every((value) => value === undefined || value.length === 0)) return undefined;
+  if (secretKey === undefined || !secretKey.startsWith("sk_") || essentialPriceId === undefined || !essentialPriceId.startsWith("price_")
+    || !isCheckoutReturnUrl(successUrl) || !isCheckoutReturnUrl(cancelUrl)) {
+    throw new Error("Stripe Checkout requires STRIPE_SECRET_KEY, STRIPE_ESSENTIAL_PRICE_ID, STRIPE_CHECKOUT_SUCCESS_URL, and STRIPE_CHECKOUT_CANCEL_URL");
+  }
+  return { secretKey, essentialPriceId, successUrl, cancelUrl };
+}
+
+function isCheckoutReturnUrl(value: string | undefined): value is string {
+  if (value === undefined || value.length === 0) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.username === "" && url.password === "";
+  } catch {
+    return false;
+  }
 }
 
 export function withInviteLink(referral: ReferralSummary, telegramBotUsername: string): ReferralSummary & { readonly inviteLink: string } {

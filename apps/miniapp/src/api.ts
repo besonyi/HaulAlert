@@ -46,6 +46,10 @@ export interface MiniAppEntitlement {
   readonly cancelAtPeriodEnd: boolean;
 }
 
+export interface MiniAppCheckoutSession {
+  readonly url: string;
+}
+
 export interface MiniAppReferralSummary {
   readonly code: string;
   readonly inviteLink: string;
@@ -95,6 +99,11 @@ export class MiniAppApiClient {
   public async cancelSubscription(): Promise<MiniAppEntitlement> {
     const response = await this.send("/v1/account/subscription/cancel", "POST");
     return (await response.json() as { entitlement: MiniAppEntitlement }).entitlement;
+  }
+
+  public async createEssentialCheckout(): Promise<MiniAppCheckoutSession> {
+    const response = await this.send("/v1/account/subscription/checkout", "POST");
+    return (await response.json() as { checkout: MiniAppCheckoutSession }).checkout;
   }
 
   public async getReferralSummary(): Promise<MiniAppReferralSummary> {

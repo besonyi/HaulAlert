@@ -48,6 +48,7 @@ test("Mini App API authenticates identity and scopes alert operations to it", as
       assertCanCreateAlert: async () => {},
       cancelAtPeriodEnd: async () => ({ planId: "starter", cancelAtPeriodEnd: true })
     },
+    billing: { createEssentialCheckout: async (id) => ({ url: `https://checkout.stripe.com/${id}` }) },
     referrals: { getForUser: async () => ({ code: "A7K92D4F", activePaid: 2 }) },
     authenticate: (initData) => {
       assert.equal(initData, "verified-init-data");
@@ -79,6 +80,9 @@ test("Mini App API authenticates identity and scopes alert operations to it", as
     assert.equal(entitlement.status, 200);
     assert.equal((await entitlement.json() as { entitlement: { planId: string } }).entitlement.planId, "starter");
     assert.equal((await fetch(`${baseUrl}/v1/account/subscription/cancel`, { method: "POST", headers })).status, 200);
+    const checkout = await fetch(`${baseUrl}/v1/account/subscription/checkout`, { method: "POST", headers });
+    assert.equal(checkout.status, 201);
+    assert.equal((await checkout.json() as { checkout: { url: string } }).checkout.url, `https://checkout.stripe.com/${userId}`);
     const referral = await fetch(`${baseUrl}/v1/referrals`, { headers });
     assert.equal(referral.status, 200);
     assert.equal((await referral.json() as { referral: { code: string } }).referral.code, "A7K92D4F");

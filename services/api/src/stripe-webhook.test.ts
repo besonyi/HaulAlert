@@ -39,7 +39,7 @@ test("only payment lifecycle events can update a subscription", () => {
   assert.deepEqual(parseStripeSubscriptionEvent(invoicePayload()), {
     eventId: "evt_paid_invoice", eventType: "invoice.paid", userId,
     customerId: "cus_customer", subscriptionId: "sub_subscription",
-    paymentStatus: "paid", subscriptionStatus: "active"
+    paymentStatus: "paid", subscriptionStatus: "active", planId: "essential"
   });
   assert.equal(parseStripeSubscriptionEvent(Buffer.from(JSON.stringify({
     id: "evt_other", type: "customer.created", data: { object: {} }
@@ -49,7 +49,7 @@ test("only payment lifecycle events can update a subscription", () => {
   }))), {
     eventId: "evt_refund", eventType: "charge.refunded", userId,
     customerId: "cus_customer", subscriptionId: undefined,
-    paymentStatus: "refunded", subscriptionStatus: "active"
+    paymentStatus: "refunded", subscriptionStatus: "active", planId: "free"
   });
 });
 
@@ -64,10 +64,23 @@ test("Stripe processing records the event before updating payment and referral s
   const event = parseStripeSubscriptionEvent(invoicePayload());
   if (event === undefined) throw new Error("Expected invoice event");
   assert.equal(await processor.process(event), "processed");
-  assert.deepEqual(parameters, ["evt_paid_invoice", "invoice.paid", userId, "cus_customer", "sub_subscription", "paid", "active"]);
+  assert.deepEqual(parameters, ["evt_paid_invoice", "invoice.paid", userId, "cus_customer", "sub_subscription", "paid", "active", true, "essential"]);
   assert.match(statement, /ON CONFLICT \(event_id\) DO NOTHING/);
   assert.match(statement, /latest_payment_status = COALESCE/);
   assert.match(statement, /THEN 'active_paid' ELSE 'inactive'/);
+  assert.match(statement, /plan_id = COALESCE/);
+});
+
+test("paid Checkout sessions link Stripe references and tolerate invoice webhook reordering", () => {
+  assert.deepEqual(parseStripeSubscriptionEvent(Buffer.from(JSON.stringify({
+    id: "evt_checkout", type: "checkout.session.completed", data: { object: {
+      id: "cs_completed", customer: "cus_customer", subscription: "sub_subscription", client_reference_id: userId, payment_status: "paid"
+    } }
+  }))), {
+    eventId: "evt_checkout", eventType: "checkout.session.completed", userId,
+    customerId: "cus_customer", subscriptionId: "sub_subscription",
+    paymentStatus: "paid", subscriptionStatus: undefined, planId: "essential"
+  });
 });
 
 test("valid, unrelated events are acknowledged without a database write", async () => {
