@@ -151,6 +151,7 @@ function alertMarkup(alert: MiniAppAlert): string {
   const detail = [
     alert.filter.trailerTypes.join(" / "),
     alert.filter.minimumPayUsd === null ? "Any pay" : `$${alert.filter.minimumPayUsd.toLocaleString()}+`,
+    alert.filter.minimumRatePerMile === null ? "Any rate" : `$${alert.filter.minimumRatePerMile.toFixed(2)}/mi+`,
     alert.filter.providers.length === 3 ? "All boards" : providerListLabel(alert.filter.providers)
   ].join(" · ");
   const pauseLabel = alert.status === "active" ? "Pause" : "Resume";
@@ -171,7 +172,8 @@ function createMarkup(): string {
     ${locationList("origin", "Origin", filter?.origins)}
     ${locationList("destination", "Destination", filter?.destinations)}
     <div class="form-grid"><label>Trailer<select name="trailer"><option value="open"${selected(filter?.trailerTypes.includes("open") ?? true)}>Open</option><option value="enclosed"${selected(filter?.trailerTypes.includes("enclosed") ?? false)}>Enclosed</option></select></label><label>Minimum pay<input name="minimumPay" type="number" min="0" step="50" placeholder="Any" value="${formValue(filter?.minimumPayUsd)}" /></label></div>
-    <div class="form-grid"><label>Min vehicles<input name="minimumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.minimum)}" /></label><label>Max vehicles<input name="maximumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.maximum)}" /></label></div>
+    <div class="form-grid"><label>Minimum rate / mile<input name="minimumRatePerMile" type="number" min="0" step="0.01" placeholder="Any" value="${formValue(filter?.minimumRatePerMile)}" /></label><label>Min vehicles<input name="minimumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.minimum)}" /></label></div>
+    <label>Max vehicles<input name="maximumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.maximum)}" /></label>
     <fieldset><legend>Load boards</legend><p class="provider-help">Choose where HaulAlert should look. Your alert is matched only against the boards selected here.</p><label class="check"><input type="checkbox" name="provider" value="central-dispatch"${checked(filter, "central-dispatch")} />Central Dispatch</label><label class="check"><input type="checkbox" name="provider" value="super-dispatch"${checked(filter, "super-dispatch")} />Super Dispatch</label><label class="check"><input type="checkbox" name="provider" value="shipcars"${checked(filter, "shipcars")} />Ship.Cars</label><p class="provider-summary" data-provider-summary role="status">${escapeHtml(providerMonitoringSummary(filter?.providers ?? defaultProviders))}</p></fieldset>
     ${brokerBlocksMarkup()}
     <button class="primary submit" type="submit">${editing ? "Save changes" : "Start monitoring"}</button>
@@ -493,7 +495,7 @@ function filterFromForm(form: HTMLFormElement): CanonicalFilter {
     vehicles: { minimum, maximum },
     readiness: { kind: "any" },
     minimumPayUsd: numberOrNull(data.get("minimumPay")),
-    minimumRatePerMile: null,
+    minimumRatePerMile: numberOrNull(data.get("minimumRatePerMile")),
     providers,
     blockedBrokerIds: data.getAll("blockedBrokerId").filter((value): value is string => typeof value === "string" && /^(mc|dot):.+$/i.test(value))
   };
