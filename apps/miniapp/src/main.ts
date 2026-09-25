@@ -11,6 +11,7 @@ import {
 } from "./api.js";
 import { locationsFromForm } from "./location-form.js";
 import { providerListLabel, providerMonitoringSummary } from "./provider-copy.js";
+import { readinessFromForm } from "./readiness-form.js";
 import { brokerDetailsLabel, safeLoadBoardUrl } from "./recent-load-details.js";
 
 interface TelegramWebApp {
@@ -171,6 +172,7 @@ function createMarkup(): string {
     <label>Alert name<input name="name" maxlength="80" placeholder="e.g. CA → AZ open loads" value="${formValue(filter?.name)}" required /></label>
     ${locationList("origin", "Origin", filter?.origins)}
     ${locationList("destination", "Destination", filter?.destinations)}
+    ${readinessMarkup(filter?.readiness)}
     <div class="form-grid"><label>Trailer<select name="trailer"><option value="open"${selected(filter?.trailerTypes.includes("open") ?? true)}>Open</option><option value="enclosed"${selected(filter?.trailerTypes.includes("enclosed") ?? false)}>Enclosed</option></select></label><label>Minimum pay<input name="minimumPay" type="number" min="0" step="50" placeholder="Any" value="${formValue(filter?.minimumPayUsd)}" /></label></div>
     <div class="form-grid"><label>Minimum rate / mile<input name="minimumRatePerMile" type="number" min="0" step="0.01" placeholder="Any" value="${formValue(filter?.minimumRatePerMile)}" /></label><label>Min vehicles<input name="minimumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.minimum)}" /></label></div>
     <label>Max vehicles<input name="maximumVehicles" type="number" min="1" step="1" placeholder="Any" value="${formValue(filter?.vehicles.maximum)}" /></label>
@@ -179,6 +181,12 @@ function createMarkup(): string {
     <button class="primary submit" type="submit">${editing ? "Save changes" : "Start monitoring"}</button>
     ${editing ? `<button class="secondary cancel" type="button" data-screen="dashboard">Cancel</button>` : ""}
   </form>`;
+}
+
+function readinessMarkup(readiness: CanonicalFilter["readiness"] | undefined): string {
+  const current = readiness ?? { kind: "any" };
+  const range = current.kind === "date-range" ? current : undefined;
+  return `<fieldset class="readiness"><legend>Vehicle readiness</legend><label>When should the vehicle be ready?<select name="readiness" data-readiness><option value="any"${selected(current.kind === "any")}>Any date</option><option value="today"${selected(current.kind === "today")}>Today</option><option value="tomorrow"${selected(current.kind === "tomorrow")}>Tomorrow</option><option value="date-range"${selected(current.kind === "date-range")}>Date range</option></select></label><div class="form-grid" data-readiness-range${range === undefined ? " hidden" : ""}><label>From<input name="availableFrom" type="date" value="${formValue(range?.availableFrom)}" /></label><label>Until<input name="availableUntil" type="date" value="${formValue(range?.availableUntil)}" /></label></div></fieldset>`;
 }
 
 function brokerBlocksMarkup(): string {
@@ -242,6 +250,10 @@ function bindInteractions(): void {
     select.addEventListener("change", () => updateLocationFields(select));
     updateLocationFields(select);
   });
+  app.querySelectorAll<HTMLSelectElement>("[data-readiness]").forEach((select) => {
+    select.addEventListener("change", () => updateReadinessFields(select));
+    updateReadinessFields(select);
+  });
   app.querySelectorAll<HTMLButtonElement>("[data-add-location]").forEach((button) => {
     button.addEventListener("click", () => addLocation(button.dataset.addLocation));
   });
@@ -301,6 +313,11 @@ function updateLocationFields(select: HTMLSelectElement): void {
   if (group === null) return;
   group.querySelectorAll<HTMLElement>("[data-location-required]").forEach((element) => { element.hidden = select.value === "anywhere"; });
   group.querySelectorAll<HTMLElement>("[data-city-fields]").forEach((element) => { element.hidden = select.value !== "city"; });
+}
+
+function updateReadinessFields(select: HTMLSelectElement): void {
+  const range = select.closest<HTMLElement>(".readiness")?.querySelector<HTMLElement>("[data-readiness-range]");
+  if (range !== null && range !== undefined) range.hidden = select.value !== "date-range";
 }
 
 async function createAlert(event: SubmitEvent): Promise<void> {
@@ -493,7 +510,7 @@ function filterFromForm(form: HTMLFormElement): CanonicalFilter {
     destinations: locationsFromForm(data, "destination"),
     trailerTypes: [data.get("trailer") === "enclosed" ? "enclosed" : "open"],
     vehicles: { minimum, maximum },
-    readiness: { kind: "any" },
+    readiness: readinessFromForm(data),
     minimumPayUsd: numberOrNull(data.get("minimumPay")),
     minimumRatePerMile: numberOrNull(data.get("minimumRatePerMile")),
     providers,
