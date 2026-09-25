@@ -96,9 +96,9 @@ export class MiniAppApiClient {
     return (await response.json() as { entitlement: MiniAppEntitlement }).entitlement;
   }
 
-  public async cancelSubscription(): Promise<MiniAppEntitlement> {
-    const response = await this.send("/v1/account/subscription/cancel", "POST");
-    return (await response.json() as { entitlement: MiniAppEntitlement }).entitlement;
+  public async createBillingPortal(): Promise<MiniAppCheckoutSession> {
+    const response = await this.send("/v1/account/subscription/portal", "POST");
+    return (await response.json() as { portal: MiniAppCheckoutSession }).portal;
   }
 
   public async createEssentialCheckout(): Promise<MiniAppCheckoutSession> {

@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
+import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresSubscriptionPortalService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
@@ -38,6 +38,11 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
   const telegramUsers = new PostgresTelegramUserResolver(database);
   const partners = new PostgresPartnerAccountRepository(database);
   const referrals = new PostgresReferralRepository(database);
+  const checkout = config.stripeCheckout === undefined ? undefined : new StripeCheckoutClient(config.stripeCheckout);
+  const billing = checkout === undefined ? undefined : {
+    createEssentialCheckout: (userId: string) => new PostgresSubscriptionCheckoutService(database, checkout).createEssentialCheckout(userId),
+    createPortal: (userId: string) => new PostgresSubscriptionPortalService(database, checkout).createPortal(userId)
+  };
   const server = createMiniAppApiServer({
     alerts: new PostgresAlertRepository(database),
     dashboard: new PostgresDashboardRepository(database),
@@ -52,9 +57,7 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
       )
     },
     partners,
-    ...(config.stripeCheckout === undefined ? {} : {
-      billing: new PostgresSubscriptionCheckoutService(database, new StripeCheckoutClient(config.stripeCheckout))
-    }),
+    ...(billing === undefined ? {} : { billing }),
     ...(config.stripeWebhookSecret === undefined ? {} : {
       stripeWebhook: new StripeWebhookHandler(config.stripeWebhookSecret, new PostgresStripeWebhookEventProcessor(database))
     }),
@@ -108,12 +111,13 @@ export function optionalStripeCheckoutConfig(environment: NodeJS.ProcessEnv): St
   const essentialPriceId = environment.STRIPE_ESSENTIAL_PRICE_ID?.trim();
   const successUrl = environment.STRIPE_CHECKOUT_SUCCESS_URL?.trim();
   const cancelUrl = environment.STRIPE_CHECKOUT_CANCEL_URL?.trim();
-  if ([secretKey, essentialPriceId, successUrl, cancelUrl].every((value) => value === undefined || value.length === 0)) return undefined;
+  const portalReturnUrl = environment.STRIPE_BILLING_PORTAL_RETURN_URL?.trim();
+  if ([secretKey, essentialPriceId, successUrl, cancelUrl, portalReturnUrl].every((value) => value === undefined || value.length === 0)) return undefined;
   if (secretKey === undefined || !secretKey.startsWith("sk_") || essentialPriceId === undefined || !essentialPriceId.startsWith("price_")
-    || !isCheckoutReturnUrl(successUrl) || !isCheckoutReturnUrl(cancelUrl)) {
-    throw new Error("Stripe Checkout requires STRIPE_SECRET_KEY, STRIPE_ESSENTIAL_PRICE_ID, STRIPE_CHECKOUT_SUCCESS_URL, and STRIPE_CHECKOUT_CANCEL_URL");
+    || !isCheckoutReturnUrl(successUrl) || !isCheckoutReturnUrl(cancelUrl) || !isCheckoutReturnUrl(portalReturnUrl)) {
+    throw new Error("Stripe Checkout requires STRIPE_SECRET_KEY, STRIPE_ESSENTIAL_PRICE_ID, STRIPE_CHECKOUT_SUCCESS_URL, STRIPE_CHECKOUT_CANCEL_URL, and STRIPE_BILLING_PORTAL_RETURN_URL");
   }
-  return { secretKey, essentialPriceId, successUrl, cancelUrl };
+  return { secretKey, essentialPriceId, successUrl, cancelUrl, portalReturnUrl };
 }
 
 function isCheckoutReturnUrl(value: string | undefined): value is string {

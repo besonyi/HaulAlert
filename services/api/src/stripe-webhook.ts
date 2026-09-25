@@ -7,13 +7,14 @@ export type StripeSubscriptionStatus = "active" | "cancelled";
 
 export interface StripeSubscriptionEvent {
   readonly eventId: string;
-  readonly eventType: "checkout.session.completed" | "invoice.paid" | "invoice.payment_failed" | "charge.refunded" | "charge.dispute.created" | "customer.subscription.deleted";
+  readonly eventType: "checkout.session.completed" | "invoice.paid" | "invoice.payment_failed" | "charge.refunded" | "charge.dispute.created" | "customer.subscription.updated" | "customer.subscription.deleted";
   readonly userId: string | undefined;
   readonly customerId: string | undefined;
   readonly subscriptionId: string | undefined;
   readonly paymentStatus: StripePaymentStatus | undefined;
   readonly subscriptionStatus: StripeSubscriptionStatus | undefined;
   readonly planId: "free" | "essential" | undefined;
+  readonly cancelAtPeriodEnd: boolean | undefined;
 }
 
 export type StripeWebhookDisposition = "processed" | "duplicate" | "ignored";
@@ -61,20 +62,22 @@ export function parseStripeSubscriptionEvent(payload: Buffer): StripeSubscriptio
   }
   const eventType = event.type;
   if (eventType !== "checkout.session.completed" && eventType !== "invoice.paid" && eventType !== "invoice.payment_failed" && eventType !== "charge.refunded"
-    && eventType !== "charge.dispute.created" && eventType !== "customer.subscription.deleted") return undefined;
+    && eventType !== "charge.dispute.created" && eventType !== "customer.subscription.updated" && eventType !== "customer.subscription.deleted") return undefined;
   const object = event.data.object;
   const userId = metadataUserId(object.metadata) ?? metadataUserId(subscriptionMetadata(object)) ?? clientReferenceUserId(object.client_reference_id);
   const customerId = optionalStripeId(object.customer, "cus_");
-  const subscriptionId = eventType === "customer.subscription.deleted"
+  const subscriptionId = eventType === "customer.subscription.deleted" || eventType === "customer.subscription.updated"
     ? optionalStripeId(object.id, "sub_")
     : optionalStripeId(object.subscription, "sub_");
   return {
     eventId: requiredEventId(event.id), eventType, userId, customerId, subscriptionId,
     paymentStatus: eventType === "invoice.paid" || (eventType === "checkout.session.completed" && object.payment_status === "paid") ? "paid" : eventType === "invoice.payment_failed" ? "failed"
       : eventType === "charge.refunded" ? "refunded" : eventType === "charge.dispute.created" ? "disputed" : undefined,
-    subscriptionStatus: eventType === "checkout.session.completed" ? undefined : "active",
+    subscriptionStatus: eventType === "checkout.session.completed" || eventType === "customer.subscription.updated" ? undefined : "active",
     planId: eventType === "invoice.paid" || (eventType === "checkout.session.completed" && object.payment_status === "paid") ? "essential"
-      : eventType === "invoice.payment_failed" || eventType === "charge.refunded" || eventType === "charge.dispute.created" || eventType === "customer.subscription.deleted" ? "free" : undefined
+      : eventType === "invoice.payment_failed" || eventType === "charge.refunded" || eventType === "charge.dispute.created" || eventType === "customer.subscription.deleted" ? "free" : undefined,
+    cancelAtPeriodEnd: eventType === "customer.subscription.updated" && typeof object.cancel_at_period_end === "boolean" ? object.cancel_at_period_end
+      : eventType === "customer.subscription.deleted" ? false : undefined
   };
 }
 
@@ -104,7 +107,8 @@ export class PostgresStripeWebhookEventProcessor implements StripeWebhookEventPr
           stripe_subscription_id = COALESCE($5::text, subscriptions.stripe_subscription_id),
           latest_payment_status = COALESCE($6::text, subscriptions.latest_payment_status),
           status = COALESCE($7::text, subscriptions.status),
-          plan_id = COALESCE($9::text, subscriptions.plan_id), updated_at = now()
+          plan_id = COALESCE($9::text, subscriptions.plan_id),
+          cancel_at_period_end = COALESCE($10::boolean, subscriptions.cancel_at_period_end), updated_at = now()
         FROM inserted_event
         WHERE subscriptions.user_id = inserted_event.user_id
         RETURNING subscriptions.user_id, subscriptions.status, subscriptions.latest_payment_status
@@ -123,7 +127,7 @@ export class PostgresStripeWebhookEventProcessor implements StripeWebhookEventPr
       SELECT (SELECT count(*) FROM matched_subscription) AS matched_count,
         (SELECT count(*) FROM inserted_event) AS inserted_count`,
       [event.eventId, event.eventType, event.userId ?? null, event.customerId ?? null, event.subscriptionId ?? null,
-        event.paymentStatus ?? null, event.subscriptionStatus ?? null, event.paymentStatus !== undefined || event.planId === "free", event.planId ?? null]
+        event.paymentStatus ?? null, event.subscriptionStatus ?? null, event.paymentStatus !== undefined || event.planId === "free", event.planId ?? null, event.cancelAtPeriodEnd ?? null]
     );
     const row = result.rows[0];
     if (row === undefined) throw new Error("Expected Stripe webhook processing result");

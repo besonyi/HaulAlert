@@ -33,6 +33,7 @@ export interface MiniAppApiDependencies {
   };
   readonly billing?: {
     createEssentialCheckout(userId: string): Promise<{ readonly url: string }>;
+    createPortal(userId: string): Promise<{ readonly url: string }>;
   };
   readonly stripeWebhook?: {
     handle(payload: Buffer, signatureHeader: string | undefined): Promise<unknown>;
@@ -114,13 +115,15 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       return { statusCode: 200, body: { entitlement: await dependencies.entitlements.getForUser(user.id) } };
     }
     if (pathname === "/v1/account/subscription/cancel" && request.method === "POST") {
-      if (dependencies.entitlements === undefined) return { statusCode: 404, body: { error: "not_found" } };
-      const entitlement = await dependencies.entitlements.cancelAtPeriodEnd(user.id);
-      return entitlement === undefined ? { statusCode: 409, body: { error: "subscription_unavailable" } } : { statusCode: 200, body: { entitlement } };
+      return { statusCode: 410, body: { error: "billing_portal_required" } };
     }
     if (pathname === "/v1/account/subscription/checkout" && request.method === "POST") {
       if (dependencies.billing === undefined) return { statusCode: 404, body: { error: "not_found" } };
       return { statusCode: 201, body: { checkout: await dependencies.billing.createEssentialCheckout(user.id) } };
+    }
+    if (pathname === "/v1/account/subscription/portal" && request.method === "POST") {
+      if (dependencies.billing === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      return { statusCode: 201, body: { portal: await dependencies.billing.createPortal(user.id) } };
     }
     if (pathname === "/v1/referrals" && request.method === "GET") {
       if (dependencies.referrals === undefined) return { statusCode: 404, body: { error: "not_found" } };

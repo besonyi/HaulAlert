@@ -98,3 +98,14 @@ test("Mini App API client starts Essential checkout with the Telegram authorizat
   assert.equal(captured?.init?.method, "POST");
   assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
 });
+
+test("Mini App API client opens the Stripe billing portal with the Telegram authorization", async () => {
+  let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
+  const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {
+    captured = { input, ...(init === undefined ? {} : { init }) };
+    return new Response(JSON.stringify({ portal: { url: "https://billing.stripe.com/p/session/test" } }), { status: 201 });
+  });
+  assert.equal((await client.createBillingPortal()).url, "https://billing.stripe.com/p/session/test");
+  assert.equal(captured?.input, "/api/v1/account/subscription/portal");
+  assert.equal(captured?.init?.method, "POST");
+});

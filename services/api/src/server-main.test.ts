@@ -17,10 +17,12 @@ test("Stripe Checkout remains disabled until all required server settings exist"
   assert.equal(optionalStripeCheckoutConfig({}), undefined);
   assert.deepEqual(optionalStripeCheckoutConfig({
     STRIPE_SECRET_KEY: "sk_test_example", STRIPE_ESSENTIAL_PRICE_ID: "price_essential",
-    STRIPE_CHECKOUT_SUCCESS_URL: "https://haulalert.example/billing/success", STRIPE_CHECKOUT_CANCEL_URL: "https://haulalert.example/billing/cancel"
+    STRIPE_CHECKOUT_SUCCESS_URL: "https://haulalert.example/billing/success", STRIPE_CHECKOUT_CANCEL_URL: "https://haulalert.example/billing/cancel",
+    STRIPE_BILLING_PORTAL_RETURN_URL: "https://haulalert.example/account"
   }), {
     secretKey: "sk_test_example", essentialPriceId: "price_essential",
-    successUrl: "https://haulalert.example/billing/success", cancelUrl: "https://haulalert.example/billing/cancel"
+    successUrl: "https://haulalert.example/billing/success", cancelUrl: "https://haulalert.example/billing/cancel",
+    portalReturnUrl: "https://haulalert.example/account"
   });
   assert.throws(() => optionalStripeCheckoutConfig({ STRIPE_SECRET_KEY: "sk_test_example" }), /Stripe Checkout requires/);
 });

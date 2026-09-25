@@ -95,7 +95,7 @@ function planMarkup(): string {
   const status = entitlement.cancelAtPeriodEnd ? "Cancellation scheduled" : entitlement.subscriptionStatus === "active" ? "Active" : entitlement.subscriptionStatus;
   const action = entitlement.planId === "free"
     ? `<button class="primary" type="button" data-upgrade-essential>Upgrade to Essential · $25/mo</button>`
-    : entitlement.subscriptionStatus === "active" && !entitlement.cancelAtPeriodEnd ? `<button class="secondary" type="button" data-cancel-subscription>Cancel at period end</button>` : "";
+    : `<button class="secondary" type="button" data-manage-subscription>Manage billing</button>`;
   return `<section class="plan"><div><strong>${escapeHtml(entitlement.planName)} plan</strong><span>${entitlement.activeAlertCount} of ${entitlement.maxActiveAlerts} active alerts · ${escapeHtml(status)}</span></div>${action}</section>`;
 }
 
@@ -244,7 +244,7 @@ function bindInteractions(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-remove-broker]").forEach((button) => {
     button.addEventListener("click", () => removeBlockedBroker(button.dataset.removeBroker));
   });
-  app.querySelector<HTMLButtonElement>("[data-cancel-subscription]")?.addEventListener("click", () => { void cancelSubscription(); });
+  app.querySelector<HTMLButtonElement>("[data-manage-subscription]")?.addEventListener("click", () => { void manageSubscription(); });
   app.querySelector<HTMLButtonElement>("[data-upgrade-essential]")?.addEventListener("click", () => { void upgradeToEssential(); });
   app.querySelector<HTMLButtonElement>("[data-copy-referral]")?.addEventListener("click", () => { void copyReferralLink(); });
 }
@@ -384,15 +384,15 @@ function removeBlockedBroker(identity: string | undefined): void {
   updateBrokerUi();
 }
 
-async function cancelSubscription(): Promise<void> {
-  if (client === undefined || entitlement === undefined) return;
+async function manageSubscription(): Promise<void> {
+  if (client === undefined) return;
   try {
-    entitlement = await client.cancelSubscription();
-    message = "Your plan will end at the close of its current period.";
+    const portal = await client.createBillingPortal();
+    window.location.assign(portal.url);
   } catch (error: unknown) {
     message = readableError(error);
+    render();
   }
-  render();
 }
 
 async function upgradeToEssential(): Promise<void> {

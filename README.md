@@ -74,7 +74,7 @@ pnpm --filter @haulalert/api-service start
 
 ### Stripe Checkout
 
-Billing is deliberately off until all `STRIPE_*` settings in `.env.example` are configured. The API creates a hosted Essential Checkout session only after the signed-in customer requests it. Stripe then confirms payment through the signed webhook before HaulAlert grants Essential limits or marks a referral as active paid. Apply migration `0010_stripe_webhook_events.sql` before enabling the webhook.
+Billing is deliberately off until all `STRIPE_*` settings in `.env.example` are configured. The API creates a hosted Essential Checkout session only after the signed-in customer requests it, and opens the Stripe Customer Portal for cancellation or payment-method changes. Stripe then confirms payment through the signed webhook before HaulAlert grants Essential limits or marks a referral as active paid. Apply migration `0010_stripe_webhook_events.sql` before enabling the webhook.
 
 For the mobile Mini App shell and its same-origin `/api` proxy, run:
 

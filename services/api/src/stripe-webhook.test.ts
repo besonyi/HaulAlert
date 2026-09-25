@@ -39,7 +39,7 @@ test("only payment lifecycle events can update a subscription", () => {
   assert.deepEqual(parseStripeSubscriptionEvent(invoicePayload()), {
     eventId: "evt_paid_invoice", eventType: "invoice.paid", userId,
     customerId: "cus_customer", subscriptionId: "sub_subscription",
-    paymentStatus: "paid", subscriptionStatus: "active", planId: "essential"
+    paymentStatus: "paid", subscriptionStatus: "active", planId: "essential", cancelAtPeriodEnd: undefined
   });
   assert.equal(parseStripeSubscriptionEvent(Buffer.from(JSON.stringify({
     id: "evt_other", type: "customer.created", data: { object: {} }
@@ -49,7 +49,7 @@ test("only payment lifecycle events can update a subscription", () => {
   }))), {
     eventId: "evt_refund", eventType: "charge.refunded", userId,
     customerId: "cus_customer", subscriptionId: undefined,
-    paymentStatus: "refunded", subscriptionStatus: "active", planId: "free"
+    paymentStatus: "refunded", subscriptionStatus: "active", planId: "free", cancelAtPeriodEnd: undefined
   });
 });
 
@@ -64,11 +64,23 @@ test("Stripe processing records the event before updating payment and referral s
   const event = parseStripeSubscriptionEvent(invoicePayload());
   if (event === undefined) throw new Error("Expected invoice event");
   assert.equal(await processor.process(event), "processed");
-  assert.deepEqual(parameters, ["evt_paid_invoice", "invoice.paid", userId, "cus_customer", "sub_subscription", "paid", "active", true, "essential"]);
+  assert.deepEqual(parameters, ["evt_paid_invoice", "invoice.paid", userId, "cus_customer", "sub_subscription", "paid", "active", true, "essential", null]);
   assert.match(statement, /ON CONFLICT \(event_id\) DO NOTHING/);
   assert.match(statement, /latest_payment_status = COALESCE/);
   assert.match(statement, /THEN 'active_paid' ELSE 'inactive'/);
   assert.match(statement, /plan_id = COALESCE/);
+});
+
+test("subscription updates synchronize a scheduled Stripe cancellation without downgrading early", () => {
+  assert.deepEqual(parseStripeSubscriptionEvent(Buffer.from(JSON.stringify({
+    id: "evt_cancel_scheduled", type: "customer.subscription.updated", data: { object: {
+      id: "sub_subscription", customer: "cus_customer", cancel_at_period_end: true, metadata: { haulalert_user_id: userId }
+    } }
+  }))), {
+    eventId: "evt_cancel_scheduled", eventType: "customer.subscription.updated", userId,
+    customerId: "cus_customer", subscriptionId: "sub_subscription",
+    paymentStatus: undefined, subscriptionStatus: undefined, planId: undefined, cancelAtPeriodEnd: true
+  });
 });
 
 test("paid Checkout sessions link Stripe references and tolerate invoice webhook reordering", () => {
@@ -79,7 +91,7 @@ test("paid Checkout sessions link Stripe references and tolerate invoice webhook
   }))), {
     eventId: "evt_checkout", eventType: "checkout.session.completed", userId,
     customerId: "cus_customer", subscriptionId: "sub_subscription",
-    paymentStatus: "paid", subscriptionStatus: undefined, planId: "essential"
+    paymentStatus: "paid", subscriptionStatus: undefined, planId: "essential", cancelAtPeriodEnd: undefined
   });
 });
 

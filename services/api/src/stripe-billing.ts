@@ -9,6 +9,7 @@ export interface StripeCheckoutConfig {
   readonly essentialPriceId: string;
   readonly successUrl: string;
   readonly cancelUrl: string;
+  readonly portalReturnUrl: string;
 }
 
 export class StripeCheckoutUnavailableError extends Error {}
@@ -47,6 +48,19 @@ export class StripeCheckoutClient {
     }
     return { url: payload.url };
   }
+
+  public async createBillingPortal(customerId: string): Promise<StripeCheckoutSession> {
+    const response = await this.request("https://api.stripe.com/v1/billing_portal/sessions", {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.config.secretKey}`, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ customer: customerId, return_url: this.config.portalReturnUrl })
+    });
+    const payload = await response.json().catch(() => undefined) as unknown;
+    if (!response.ok || !isRecord(payload) || typeof payload.url !== "string" || !isHttpUrl(payload.url)) {
+      throw new StripeCheckoutUnavailableError();
+    }
+    return { url: payload.url };
+  }
 }
 
 /** Limits a customer to a hosted Essential checkout when they are currently on Free. */
@@ -68,6 +82,26 @@ export class PostgresSubscriptionCheckoutService {
     const customerId = typeof row.stripe_customer_id === "string" && row.stripe_customer_id.startsWith("cus_")
       ? row.stripe_customer_id : null;
     return this.checkout.createEssentialCheckout(userId, customerId);
+  }
+}
+
+/** Makes Stripe the sole customer-facing place for cancellation and payment-method changes. */
+export class PostgresSubscriptionPortalService {
+  public constructor(
+    private readonly database: SqlExecutor,
+    private readonly checkout: StripeCheckoutClient
+  ) {}
+
+  public async createPortal(userId: string): Promise<StripeCheckoutSession> {
+    const result = await this.database.query(
+      `SELECT plan_id, stripe_customer_id FROM subscriptions WHERE user_id = $1::uuid`,
+      [userId]
+    );
+    const row = result.rows[0];
+    if (row === undefined || row.plan_id !== "essential" || typeof row.stripe_customer_id !== "string" || !row.stripe_customer_id.startsWith("cus_")) {
+      throw new StripeCheckoutUnavailableError();
+    }
+    return this.checkout.createBillingPortal(row.stripe_customer_id);
   }
 }
 

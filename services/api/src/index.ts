@@ -18,6 +18,7 @@ export { PostgresReferralRepository, type ReferralSummary } from "./referrals.js
 export { PostgresPartnerAccountRepository, type PartnerAccount, type PartnerRewardMode, type PartnerStatus } from "./partner-accounts.js";
 export {
   PostgresSubscriptionCheckoutService,
+  PostgresSubscriptionPortalService,
   StripeCheckoutClient,
   StripeCheckoutUnavailableError,
   SubscriptionAlreadyEssentialError,
