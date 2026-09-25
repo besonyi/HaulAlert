@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresTelegramUserResolver, type ReferralSummary } from "./index.js";
+import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresTelegramUserResolver, StripeWebhookHandler, type ReferralSummary } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
@@ -15,6 +15,7 @@ export interface ApiServerConfig {
   readonly port: number;
   readonly adminTelegramUserIds: readonly string[];
   readonly telegramBotUsername: string;
+  readonly stripeWebhookSecret: string | undefined;
 }
 
 export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env): ApiServerConfig {
@@ -23,7 +24,8 @@ export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env)
     telegramBotToken: getTelegramBotToken(environment),
     port: getPort(environment.API_PORT),
     adminTelegramUserIds: getAdminTelegramUserIds(environment.ADMIN_TELEGRAM_USER_IDS),
-    telegramBotUsername: getTelegramBotUsername(environment.TELEGRAM_BOT_USERNAME)
+    telegramBotUsername: getTelegramBotUsername(environment.TELEGRAM_BOT_USERNAME),
+    stripeWebhookSecret: optionalStripeWebhookSecret(environment.STRIPE_WEBHOOK_SECRET)
   };
 }
 
@@ -48,6 +50,9 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
       )
     },
     partners,
+    ...(config.stripeWebhookSecret === undefined ? {} : {
+      stripeWebhook: new StripeWebhookHandler(config.stripeWebhookSecret, new PostgresStripeWebhookEventProcessor(database))
+    }),
     isAdmin: (telegramUserId) => isAdminTelegramUser(telegramUserId, config.adminTelegramUserIds),
     authenticate: async (initData) => {
       const telegram = verifyTelegramMiniAppInitData(initData, config.telegramBotToken);
@@ -82,6 +87,15 @@ export function getTelegramBotUsername(value: string | undefined): string {
     throw new Error("TELEGRAM_BOT_USERNAME must be a valid Telegram bot username");
   }
   return username;
+}
+
+export function optionalStripeWebhookSecret(value: string | undefined): string | undefined {
+  const secret = value?.trim();
+  if (secret === undefined || secret.length === 0) return undefined;
+  if (!secret.startsWith("whsec_") || secret.length < 12) {
+    throw new Error("STRIPE_WEBHOOK_SECRET must be a Stripe webhook endpoint secret");
+  }
+  return secret;
 }
 
 export function withInviteLink(referral: ReferralSummary, telegramBotUsername: string): ReferralSummary & { readonly inviteLink: string } {

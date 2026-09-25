@@ -7,6 +7,7 @@ import type {
   ManagedAlert
 } from "./index.js";
 import { InactiveSubscriptionError, PlanLimitExceededError } from "./entitlements.js";
+import { InvalidStripeWebhookPayloadError, InvalidStripeWebhookSignatureError } from "./stripe-webhook.js";
 
 type AuthenticatedApiUser = AuthenticatedTelegramUser & { readonly telegramUserId?: string };
 
@@ -28,6 +29,9 @@ export interface MiniAppApiDependencies {
   };
   readonly partners?: {
     approve(userId: string): Promise<unknown | undefined>;
+  };
+  readonly stripeWebhook?: {
+    handle(payload: Buffer, signatureHeader: string | undefined): Promise<unknown>;
   };
   readonly isAdmin?: (telegramUserId: string) => boolean;
   readonly authenticate: (initData: string) => AuthenticatedApiUser | Promise<AuthenticatedApiUser>;
@@ -51,6 +55,20 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
   const url = new URL(request.url ?? "/", "http://localhost");
   const pathname = url.pathname;
   if (!pathname.startsWith("/v1/")) return { statusCode: 404, body: { error: "not_found" } };
+
+  if (pathname === "/v1/stripe/webhook" && request.method === "POST") {
+    if (dependencies.stripeWebhook === undefined) return { statusCode: 404, body: { error: "not_found" } };
+    try {
+      const signature = request.headers["stripe-signature"];
+      const disposition = await dependencies.stripeWebhook.handle(await readRawBody(request), typeof signature === "string" ? signature : undefined);
+      return { statusCode: 200, body: { received: true, disposition } };
+    } catch (error: unknown) {
+      if (error instanceof RequestBodyTooLargeError) return { statusCode: 413, body: { error: "body_too_large" } };
+      if (isStripeSignatureError(error)) return { statusCode: 400, body: { error: "invalid_stripe_signature" } };
+      if (isStripePayloadError(error)) return { statusCode: 400, body: { error: "invalid_stripe_payload" } };
+      throw error;
+    }
+  }
 
   let user: AuthenticatedApiUser;
   try {
@@ -164,6 +182,18 @@ function getInitData(request: IncomingMessage): string {
 }
 
 async function parseBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const rawBody = await readRawBody(request);
+  try {
+    const parsed = JSON.parse(rawBody.toString("utf8")) as unknown;
+    if (!isRecord(parsed)) throw new InvalidBodyError();
+    return parsed;
+  } catch (error: unknown) {
+    if (error instanceof InvalidBodyError) throw error;
+    throw new InvalidBodyError();
+  }
+}
+
+async function readRawBody(request: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let length = 0;
   for await (const chunk of request) {
@@ -172,14 +202,7 @@ async function parseBody(request: IncomingMessage): Promise<Record<string, unkno
     if (length > maximumRequestBodyBytes) throw new RequestBodyTooLargeError();
     chunks.push(buffer);
   }
-  try {
-    const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
-    if (!isRecord(parsed)) throw new InvalidBodyError();
-    return parsed;
-  } catch (error: unknown) {
-    if (error instanceof InvalidBodyError) throw error;
-    throw new InvalidBodyError();
-  }
+  return Buffer.concat(chunks);
 }
 
 function parseAlertRoute(pathname: string): { readonly alertId: string; readonly action: "root" | "pause" | "resume" | "duplicate" } | undefined {
@@ -218,6 +241,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isInputValidationError(error: unknown): boolean {
   return isRecord(error) && Array.isArray(error.issues);
+}
+
+function isStripeSignatureError(error: unknown): boolean {
+  return error instanceof InvalidStripeWebhookSignatureError;
+}
+
+function isStripePayloadError(error: unknown): boolean {
+  return error instanceof InvalidStripeWebhookPayloadError;
 }
 
 class RequestBodyTooLargeError extends Error {}

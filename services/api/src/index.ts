@@ -16,6 +16,17 @@ export { PostgresBrokerDirectoryRepository, normalizeBrokerQuery, type BrokerPro
 export { InactiveSubscriptionError, PlanLimitExceededError, PostgresEntitlementRepository, type AccountEntitlement } from "./entitlements.js";
 export { PostgresReferralRepository, type ReferralSummary } from "./referrals.js";
 export { PostgresPartnerAccountRepository, type PartnerAccount, type PartnerRewardMode, type PartnerStatus } from "./partner-accounts.js";
+export {
+  InvalidStripeWebhookPayloadError,
+  InvalidStripeWebhookSignatureError,
+  PostgresStripeWebhookEventProcessor,
+  StripeWebhookHandler,
+  parseStripeSubscriptionEvent,
+  verifyStripeWebhookSignature,
+  type StripeSubscriptionEvent,
+  type StripeWebhookDisposition,
+  type StripeWebhookEventProcessor
+} from "./stripe-webhook.js";
 export { PostgresTelegramUserResolver } from "./telegram-user-resolver.js";
 export { getAdminTelegramUserIds, isAdminTelegramUser } from "./admin-access.js";
 

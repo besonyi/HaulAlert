@@ -126,6 +126,32 @@ test("Mini App API rejects unsigned callers and malformed requests", async () =>
   }
 });
 
+test("Stripe webhook bypasses Telegram auth only after its own verifier accepts the raw body", async () => {
+  const server = createMiniAppApiServer({
+    alerts: {} as AlertManagementRepository,
+    dashboard: { getForUser: async () => ({ activeAlertCount: 0, loadsFoundLast24Hours: 0, recentNotifications: [] }) },
+    authenticate: () => { throw new Error("Telegram auth must not run for Stripe"); },
+    stripeWebhook: { handle: async (payload, signature) => {
+      assert.equal(payload.toString("utf8"), '{"event":"paid"}');
+      assert.equal(signature, "signed-by-stripe");
+      return "processed";
+    } }
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("Expected a TCP server address");
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/stripe/webhook`, {
+      method: "POST", headers: { "stripe-signature": "signed-by-stripe" }, body: '{"event":"paid"}'
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { received: true, disposition: "processed" });
+  } finally {
+    await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
+  }
+});
+
 test("admin overview is available only to an allowlisted Telegram identity", async () => {
   const server = createMiniAppApiServer({
     alerts: {} as AlertManagementRepository,
