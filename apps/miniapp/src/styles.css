@@ -4,14 +4,15 @@ body { margin: 0; min-width: 320px; background: radial-gradient(circle at 92% 0%
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 .shell { max-width: 680px; min-height: 100dvh; margin: auto; padding: 28px 18px 104px; }
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }.topbar-actions { display: flex; align-items: center; gap: 9px; }
 .eyebrow { margin: 0 0 4px; font-size: 11px; font-weight: 800; letter-spacing: .14em; color: var(--accent); }
 h1 { margin: 0; font-size: clamp(28px, 8vw, 38px); letter-spacing: -.04em; }
-.avatar { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--tg-text); color: white; font-weight: 800; }
+.avatar, .refresh-button { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; }.avatar { background: var(--tg-text); color: white; font-weight: 800; }.refresh-button { border: 1px solid #b7e5de; background: #effbf8; color: var(--accent-dark); font-size: 22px; line-height: 1; font-weight: 800; }.refresh-button:disabled { opacity: .55; cursor: wait; }
 .notice { margin: -8px 0 18px; padding: 12px 14px; border-radius: 12px; background: #fff7db; color: #6d4c00; font-size: 14px; }
 .content { display: grid; gap: 14px; }
 .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.summary { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid #b7e5de; border-radius: 16px; background: #e5faf6; color: #285b5a; font-size: 14px; }
 .summary-count { font-size: 28px; line-height: 1; font-weight: 800; color: var(--accent-dark); }
+.activity { display: grid; gap: 7px; padding: 15px 16px; border: 1px solid #c9d8e6; border-radius: 16px; background: linear-gradient(115deg, #ffffff, #f5fbfc); }.activity-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }.activity-heading .eyebrow { margin-bottom: 2px; }.activity p { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.45; }.activity-indicator { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; padding: 5px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }.activity-indicator.live { color: #126a51; background: #ddf8eb; }.activity-indicator.live::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }.activity-indicator.idle { color: #75580b; background: #fff3ca; }
 .cards { display: grid; gap: 12px; }
 .alert-card, .empty, .form { border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: 0 10px 26px rgb(16 42 67 / .05); }
 .alert-card { padding: 17px; }

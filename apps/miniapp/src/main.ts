@@ -43,6 +43,7 @@ let editingAlert: MiniAppAlert | undefined;
 let blockedBrokerIds: readonly string[] = [];
 let brokerResults: readonly MiniAppBrokerProfile[] = [];
 let brokerSearchMessage = "";
+let refreshing = false;
 let message = telegram?.initData ? "" : "Open HaulAlert from Telegram to manage alerts.";
 const client = telegram?.initData ? new MiniAppApiClient(telegram.initData) : undefined;
 
@@ -50,6 +51,8 @@ void refresh();
 
 async function refresh(): Promise<void> {
   if (client === undefined) return render();
+  refreshing = true;
+  render();
   try {
     [alerts, dashboard, entitlement, referral] = await Promise.all([
       client.listAlerts(), client.getDashboard(), client.getEntitlement(), client.getReferralSummary()
@@ -58,6 +61,7 @@ async function refresh(): Promise<void> {
   } catch (error: unknown) {
     message = readableError(error);
   }
+  refreshing = false;
   render();
 }
 
@@ -66,7 +70,7 @@ function render(): void {
     <section class="shell">
       <header class="topbar">
         <div><p class="eyebrow">HAULALERT</p><h1>${screen === "dashboard" ? "Your alerts" : editingAlert === undefined ? "New alert" : "Edit alert"}</h1></div>
-        <div class="avatar">${escapeHtml(telegram?.initDataUnsafe?.user?.first_name?.slice(0, 1) ?? "H")}</div>
+        <div class="topbar-actions"><button class="refresh-button" type="button" data-refresh aria-label="Refresh dashboard" ${refreshing ? "disabled" : ""}>${refreshing ? "…" : "↻"}</button><div class="avatar">${escapeHtml(telegram?.initDataUnsafe?.user?.first_name?.slice(0, 1) ?? "H")}</div></div>
       </header>
       ${message ? `<p class="notice" role="status">${escapeHtml(message)}</p>` : ""}
       ${screen === "dashboard" ? dashboardMarkup() : createMarkup()}
@@ -81,6 +85,7 @@ function render(): void {
 function dashboardMarkup(): string {
   return `<section class="content">
     <div class="summary-grid"><div class="summary"><span class="summary-count">${dashboard?.activeAlertCount ?? alerts.filter((alert) => alert.status === "active").length}</span><span>active alerts</span></div><div class="summary"><span class="summary-count">${dashboard?.loadsFoundLast24Hours ?? 0}</span><span>loads found today</span></div></div>
+    ${activityMarkup()}
     ${alerts.length === 0
       ? `<div class="empty"><span class="empty-icon">⌁</span><h2>No alerts yet</h2><p>Create your first route and we’ll notify you when a matching load appears.</p><button class="primary" data-screen="create">Create alert</button></div>`
       : `<div class="cards">${alerts.map(alertMarkup).join("")}</div>`}
@@ -88,6 +93,17 @@ function dashboardMarkup(): string {
     ${planMarkup()}
     ${referralMarkup()}
   </section>`;
+}
+
+function activityMarkup(): string {
+  const loadsToday = dashboard?.loadsFoundLast24Hours ?? 0;
+  const activeAlerts = dashboard?.activeAlertCount ?? alerts.filter((alert) => alert.status === "active").length;
+  const status = activeAlerts === 0 ? "Set up your first route" : "Monitoring active routes";
+  const detail = activeAlerts === 0
+    ? "Create an alert and HaulAlert will start checking the load boards you choose."
+    : loadsToday === 0 ? "No new matching loads have been found in the last 24 hours."
+    : `${loadsToday} matching ${loadsToday === 1 ? "load was" : "loads were"} found in the last 24 hours.`;
+  return `<section class="activity"><div class="activity-heading"><div><p class="eyebrow">MONITORING</p><h2>${escapeHtml(status)}</h2></div><span class="activity-indicator ${activeAlerts === 0 ? "idle" : "live"}">${activeAlerts === 0 ? "Ready" : "Live"}</span></div><p>${escapeHtml(detail)}</p></section>`;
 }
 
 function planMarkup(): string {
@@ -247,6 +263,7 @@ function bindInteractions(): void {
   app.querySelector<HTMLButtonElement>("[data-manage-subscription]")?.addEventListener("click", () => { void manageSubscription(); });
   app.querySelector<HTMLButtonElement>("[data-upgrade-essential]")?.addEventListener("click", () => { void upgradeToEssential(); });
   app.querySelector<HTMLButtonElement>("[data-copy-referral]")?.addEventListener("click", () => { void copyReferralLink(); });
+  app.querySelector<HTMLButtonElement>("[data-refresh]")?.addEventListener("click", () => { void refresh(); });
 }
 
 function updateProviderSummary(): void {
