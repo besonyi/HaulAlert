@@ -10,6 +10,7 @@ import {
   type MiniAppReferralSummary
 } from "./api.js";
 import { locationsFromForm } from "./location-form.js";
+import { readinessLabel, vehicleCountLabel } from "./alert-filter-summary.js";
 import { providerListLabel, providerMonitoringSummary } from "./provider-copy.js";
 import { readinessFromForm } from "./readiness-form.js";
 import { brokerDetailsLabel, safeLoadBoardUrl } from "./recent-load-details.js";
@@ -153,6 +154,8 @@ function alertMarkup(alert: MiniAppAlert): string {
     alert.filter.trailerTypes.join(" / "),
     alert.filter.minimumPayUsd === null ? "Any pay" : `$${alert.filter.minimumPayUsd.toLocaleString()}+`,
     alert.filter.minimumRatePerMile === null ? "Any rate" : `$${alert.filter.minimumRatePerMile.toFixed(2)}/mi+`,
+    readinessLabel(alert.filter.readiness),
+    vehicleCountLabel(alert.filter.vehicles),
     alert.filter.providers.length === 3 ? "All boards" : providerListLabel(alert.filter.providers)
   ].join(" · ");
   const pauseLabel = alert.status === "active" ? "Pause" : "Resume";
