@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresReferralRepository, PostgresTelegramUserResolver, type ReferralSummary } from "./index.js";
+import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresTelegramUserResolver, type ReferralSummary } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
@@ -32,6 +32,8 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
   const pool = new Pool({ connectionString: config.databaseUrl });
   const database = new PgPoolSqlExecutor(pool);
   const telegramUsers = new PostgresTelegramUserResolver(database);
+  const partners = new PostgresPartnerAccountRepository(database);
+  const referrals = new PostgresReferralRepository(database);
   const server = createMiniAppApiServer({
     alerts: new PostgresAlertRepository(database),
     dashboard: new PostgresDashboardRepository(database),
@@ -41,10 +43,11 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
     entitlements: new PostgresEntitlementRepository(database),
     referrals: {
       getForUser: async (userId) => withInviteLink(
-        await new PostgresReferralRepository(database).getForUser(userId),
+        await referrals.getForUser(userId),
         config.telegramBotUsername
       )
     },
+    partners,
     isAdmin: (telegramUserId) => isAdminTelegramUser(telegramUserId, config.adminTelegramUserIds),
     authenticate: async (initData) => {
       const telegram = verifyTelegramMiniAppInitData(initData, config.telegramBotToken);

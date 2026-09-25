@@ -15,6 +15,7 @@ export { PostgresAdminSearchRepository, normalizeAdminSearchQuery, type AdminSea
 export { PostgresBrokerDirectoryRepository, normalizeBrokerQuery, type BrokerProfile } from "./broker-directory.js";
 export { InactiveSubscriptionError, PlanLimitExceededError, PostgresEntitlementRepository, type AccountEntitlement } from "./entitlements.js";
 export { PostgresReferralRepository, type ReferralSummary } from "./referrals.js";
+export { PostgresPartnerAccountRepository, type PartnerAccount, type PartnerRewardMode, type PartnerStatus } from "./partner-accounts.js";
 export { PostgresTelegramUserResolver } from "./telegram-user-resolver.js";
 export { getAdminTelegramUserIds, isAdminTelegramUser } from "./admin-access.js";
 

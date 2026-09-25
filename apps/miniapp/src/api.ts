@@ -56,6 +56,7 @@ export interface MiniAppReferralSummary {
   readonly monthlyCreditCents: number;
   readonly partnerProgressActivePaid: number;
   readonly partnerUnlockAt: number;
+  readonly partnerStatus: "not_eligible" | "pending_approval" | "active" | "suspended" | "rejected" | "closed";
 }
 
 export class MiniAppApiError extends Error {

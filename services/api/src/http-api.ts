@@ -26,6 +26,9 @@ export interface MiniAppApiDependencies {
   readonly referrals?: {
     getForUser(userId: string): Promise<unknown>;
   };
+  readonly partners?: {
+    approve(userId: string): Promise<unknown | undefined>;
+  };
   readonly isAdmin?: (telegramUserId: string) => boolean;
   readonly authenticate: (initData: string) => AuthenticatedApiUser | Promise<AuthenticatedApiUser>;
 }
@@ -69,6 +72,14 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       const query = url.searchParams.get("q")?.trim() ?? "";
       if (query.length < 2 || query.length > 80) return { statusCode: 400, body: { error: "invalid_search_query" } };
       return { statusCode: 200, body: { results: await dependencies.adminSearch.search(query) } };
+    }
+    const partnerRoute = parseAdminPartnerRoute(pathname);
+    if (partnerRoute !== undefined && request.method === "POST") {
+      if (dependencies.partners === undefined || dependencies.isAdmin === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      if (!dependencies.isAdmin(user.telegramUserId ?? user.id)) return { statusCode: 403, body: { error: "forbidden" } };
+      if (!isUuid(partnerRoute.userId)) return { statusCode: 400, body: { error: "invalid_user_id" } };
+      const partner = await dependencies.partners.approve(partnerRoute.userId);
+      return partner === undefined ? { statusCode: 409, body: { error: "partner_unavailable" } } : { statusCode: 200, body: { partner } };
     }
     if (pathname === "/v1/brokers" && request.method === "GET") {
       if (dependencies.brokerDirectory === undefined) return { statusCode: 404, body: { error: "not_found" } };
@@ -177,6 +188,13 @@ function parseAlertRoute(pathname: string): { readonly alertId: string; readonly
   const action = segments[3] ?? "root";
   if (action !== "root" && action !== "pause" && action !== "resume" && action !== "duplicate") return undefined;
   return { alertId: segments[2], action };
+}
+
+function parseAdminPartnerRoute(pathname: string): { readonly userId: string } | undefined {
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+  return segments[0] === "v1" && segments[1] === "admin" && segments[2] === "partners" && segments[4] === "approve" && segments.length === 5 && segments[3] !== undefined
+    ? { userId: segments[3] }
+    : undefined;
 }
 
 function isUuid(value: string): boolean {

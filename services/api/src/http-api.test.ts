@@ -132,6 +132,7 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
     dashboard: { getForUser: async () => ({ activeAlertCount: 0, loadsFoundLast24Hours: 0, recentNotifications: [] }) },
     adminDashboard: { getOverview: async () => ({ users: 3, activeAlerts: 2, loads: 5, sessions: [], tabs: [], deliveries: [], recovery: [] }) },
     adminSearch: { search: async (query) => ({ users: [{ telegramUserId: query }], alerts: [], loads: [], deliveries: [] }) },
+    partners: { approve: async (userId) => ({ userId, status: "active" }) },
     isAdmin: (telegramUserId) => telegramUserId === "admin-telegram-id",
     authenticate: (initData) => ({ id: initData, firstName: "Alex" })
   });
@@ -150,6 +151,10 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
     assert.equal(search.status, 200);
     assert.equal((await search.json() as { results: { users: { telegramUserId: string }[] } }).results.users[0]?.telegramUserId, "123");
     assert.equal((await fetch(`${baseUrl}/v1/admin/search?q=x`, { headers: { authorization: "tma admin-telegram-id" } })).status, 400);
+    assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma customer" } })).status, 403);
+    const approved = await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } });
+    assert.equal(approved.status, 200);
+    assert.equal((await approved.json() as { partner: { status: string } }).partner.status, "active");
   } finally {
     await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
   }

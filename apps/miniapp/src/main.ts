@@ -100,8 +100,12 @@ function referralMarkup(): string {
   if (referral === undefined) return "";
   const remaining = Math.max(0, referral.partnerUnlockAt - referral.partnerProgressActivePaid);
   const credit = referral.monthlyCreditCents === 0 ? "No monthly credit yet" : `$${(referral.monthlyCreditCents / 100).toFixed(2)} monthly credit`;
-  const progress = remaining === 0
-    ? "Partner eligibility reached — approval will be available soon."
+  const progress = referral.partnerStatus === "active"
+    ? "You are an active Partner. Your recurring commission activates with paid referrals."
+    : referral.partnerStatus === "pending_approval"
+      ? "Partner eligibility reached — awaiting admin approval."
+      : remaining === 0
+    ? "Partner eligibility reached — approval is being prepared."
     : `Invite ${remaining} more paying ${remaining === 1 ? "user" : "users"} to unlock Partner.`;
   return `<section class="referral">
     <div class="referral-heading"><div><p class="eyebrow">INVITE & EARN</p><h2>Referral program</h2></div><span>${referral.partnerProgressActivePaid} / ${referral.partnerUnlockAt}</span></div>
