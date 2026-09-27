@@ -13,7 +13,7 @@ import { locationsFromForm } from "./location-form.js";
 import { readinessLabel, vehicleCountLabel } from "./alert-filter-summary.js";
 import { providerListLabel, providerMonitoringSummary } from "./provider-copy.js";
 import { readinessFromForm } from "./readiness-form.js";
-import { brokerDetailsLabel, safeLoadBoardUrl } from "./recent-load-details.js";
+import { brokerDetailsLabel, loadFacts, safeLoadBoardUrl } from "./recent-load-details.js";
 
 interface TelegramWebApp {
   readonly initData: string;
@@ -144,7 +144,8 @@ function recentNotificationsMarkup(): string {
     const status = notification.status === "sent" ? "Sent" : notification.status.replaceAll("_", " ");
     const broker = brokerDetailsLabel(notification.load.broker);
     const sourceUrl = safeLoadBoardUrl(notification.load.sourceUrl);
-    return `<article class="recent-item"><div><strong>${escapeHtml(route)}</strong><span>${escapeHtml(notification.alertName)} · ${escapeHtml(status)}</span>${broker === undefined ? "" : `<span class="recent-broker">Broker: ${escapeHtml(broker)}</span>`}${sourceUrl === undefined ? "" : `<a class="recent-open" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open on load board</a>`}</div><span class="recent-pay">${notification.load.payUsd === null ? "—" : `$${notification.load.payUsd.toLocaleString()}`}</span></article>`;
+    const facts = loadFacts(notification.load).join(" · ");
+    return `<article class="recent-item"><div><strong>${escapeHtml(route)}</strong><span>${escapeHtml(notification.alertName)} · ${escapeHtml(status)}</span><span class="recent-facts">${escapeHtml(facts)}</span>${broker === undefined ? "" : `<span class="recent-broker">Broker: ${escapeHtml(broker)}</span>`}${sourceUrl === undefined ? "" : `<a class="recent-open" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open on load board</a>`}</div><span class="recent-pay">${notification.load.payUsd === null ? "—" : `$${notification.load.payUsd.toLocaleString()}`}</span></article>`;
   }).join("")}</section>`;
 }
 
