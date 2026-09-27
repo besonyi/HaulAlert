@@ -53,6 +53,18 @@ test("Mini App API client updates only the selected alert", async () => {
   assert.match(String(captured?.init?.body), /Updated route/);
 });
 
+test("Mini App API client pauses only the selected alert", async () => {
+  let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
+  const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {
+    captured = { input, ...(init === undefined ? {} : { init }) };
+    return new Response(JSON.stringify({ alert: { id: "alert-1", status: "paused" } }));
+  });
+  await client.setStatus("alert-1", "paused");
+  assert.equal(captured?.input, "/api/v1/alerts/alert-1/pause");
+  assert.equal(captured?.init?.method, "POST");
+  assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
+});
+
 test("Mini App API client surfaces a safe API failure", async () => {
   const client = new MiniAppApiClient("signed-init-data", "/api", async () => {
     return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });

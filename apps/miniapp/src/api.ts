@@ -14,6 +14,7 @@ export interface MiniAppAlert {
 
 export interface MiniAppRecentNotification {
   readonly deliveryId: string;
+  readonly alertId: string;
   readonly alertName: string;
   readonly status: "queued" | "delivering" | "retry_scheduled" | "sent" | "dead_letter" | "cancelled";
   readonly createdAt: string;

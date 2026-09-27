@@ -13,6 +13,7 @@ test("Postgres dashboard scopes counts and recent deliveries to the current user
       if (calls.length === 1) return { rows: [{ active_alert_count: "2", loads_found_last_24_hours: "3" }] };
       return { rows: [{
         delivery_id: "11111111-1111-4111-8111-111111111111",
+        alert_id: "33333333-3333-4333-8333-333333333333",
         alert_name: "California to Arizona",
         status: "sent",
         created_at: "2026-09-23T12:00:00.000Z",
@@ -42,6 +43,7 @@ test("Postgres dashboard scopes counts and recent deliveries to the current user
 
   assert.equal(dashboard.activeAlertCount, 2);
   assert.equal(dashboard.loadsFoundLast24Hours, 3);
+  assert.equal(dashboard.recentNotifications[0]?.alertId, "33333333-3333-4333-8333-333333333333");
   assert.equal(dashboard.recentNotifications[0]?.load.providerLoadId, "829181");
   assert.match(calls[0]?.statement ?? "", /status = 'active'/);
   assert.deepEqual(calls[0]?.parameters, ["22222222-2222-4222-8222-222222222222"]);

@@ -145,7 +145,9 @@ function recentNotificationsMarkup(): string {
     const broker = brokerDetailsLabel(notification.load.broker);
     const sourceUrl = safeLoadBoardUrl(notification.load.sourceUrl);
     const facts = loadFacts(notification.load).join(" · ");
-    return `<article class="recent-item"><div><strong>${escapeHtml(route)}</strong><span>${escapeHtml(notification.alertName)} · ${escapeHtml(status)}</span><span class="recent-facts">${escapeHtml(facts)}</span>${broker === undefined ? "" : `<span class="recent-broker">Broker: ${escapeHtml(broker)}</span>`}${sourceUrl === undefined ? "" : `<a class="recent-open" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open on load board</a>`}</div><span class="recent-pay">${notification.load.payUsd === null ? "—" : `$${notification.load.payUsd.toLocaleString()}`}</span></article>`;
+    const alert = alerts.find((item) => item.id === notification.alertId);
+    const pause = alert?.status === "active" ? `<button class="recent-pause" type="button" data-pause-alert="${escapeHtml(alert.id)}">Pause alert</button>` : "";
+    return `<article class="recent-item"><div><strong>${escapeHtml(route)}</strong><span>${escapeHtml(notification.alertName)} · ${escapeHtml(status)}</span><span class="recent-facts">${escapeHtml(facts)}</span>${broker === undefined ? "" : `<span class="recent-broker">Broker: ${escapeHtml(broker)}</span>`}${sourceUrl === undefined ? "" : `<a class="recent-open" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open on load board</a>`}${pause}</div><span class="recent-pay">${notification.load.payUsd === null ? "—" : `$${notification.load.payUsd.toLocaleString()}`}</span></article>`;
   }).join("")}</section>`;
 }
 
@@ -271,6 +273,9 @@ function bindInteractions(): void {
   app.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((button) => {
     button.addEventListener("click", () => { void manageAlert(button); });
   });
+  app.querySelectorAll<HTMLButtonElement>("[data-pause-alert]").forEach((button) => {
+    button.addEventListener("click", () => { void pauseAlertFromNotification(button.dataset.pauseAlert); });
+  });
   app.querySelector<HTMLButtonElement>("[data-broker-search]")?.addEventListener("click", () => { void searchBrokers(); });
   app.querySelectorAll<HTMLButtonElement>("[data-add-broker]").forEach((button) => {
     button.addEventListener("click", () => addBrokerResult(button.dataset.addBroker));
@@ -384,6 +389,22 @@ async function manageAlert(button: HTMLButtonElement): Promise<void> {
       alerts = alerts.filter((alert) => alert.id !== alertId);
       message = "Alert deleted.";
     }
+  } catch (error: unknown) {
+    message = readableError(error);
+  }
+  render();
+}
+
+/** Pauses the owner-scoped alert that produced a recently delivered load. */
+async function pauseAlertFromNotification(alertId: string | undefined): Promise<void> {
+  if (client === undefined || alertId === undefined) return;
+  try {
+    const updated = await client.setStatus(alertId, "paused");
+    alerts = alerts.map((alert) => alert.id === updated.id ? updated : alert);
+    if (dashboard !== undefined) {
+      dashboard = { ...dashboard, activeAlertCount: alerts.filter((alert) => alert.status === "active").length };
+    }
+    message = "Alert paused. You will not receive new load messages for it.";
   } catch (error: unknown) {
     message = readableError(error);
   }

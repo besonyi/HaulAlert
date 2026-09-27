@@ -73,6 +73,7 @@ export type NotificationDeliveryStatus = "queued" | "delivering" | "retry_schedu
 
 export interface RecentNotification {
   readonly deliveryId: string;
+  readonly alertId: string;
   readonly alertName: string;
   readonly status: NotificationDeliveryStatus;
   readonly createdAt: Date;
@@ -133,7 +134,7 @@ export class PostgresDashboardRepository implements DashboardRepository {
       [userId]
     );
     const recent = await this.database.query(
-      `SELECT d.id AS delivery_id, a.name AS alert_name, d.status, d.created_at, d.sent_at, l.normalized_load
+      `SELECT d.id AS delivery_id, d.alert_id, a.name AS alert_name, d.status, d.created_at, d.sent_at, l.normalized_load
       FROM notification_deliveries AS d
       INNER JOIN loads AS l ON l.id = d.load_id
       INNER JOIN alerts AS a ON a.id = d.alert_id
@@ -353,6 +354,7 @@ function parseRecentNotification(row: Record<string, unknown>): RecentNotificati
   }
   return {
     deliveryId: requiredString(row.delivery_id, "delivery_id"),
+    alertId: requiredString(row.alert_id, "alert_id"),
     alertName: requiredString(row.alert_name, "alert_name"),
     status,
     createdAt: parseDate(row.created_at, "created_at"),
