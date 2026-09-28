@@ -1,0 +1,72 @@
+# Production operations runbook
+
+This is the baseline response guide for HaulAlert's API, Telegram Bot,
+notification worker, and Central Dispatch browser runtime. It intentionally
+does not contain provider credentials, Telegram tokens, webhook secrets, or
+browser session material.
+
+## Service probes
+
+| Service | Probe | Healthy response | Meaning |
+| --- | --- | --- | --- |
+| Mini App API | `GET /healthz` | `200 {"status":"ok"}` | HTTP process is running. |
+| Mini App API | `GET /readyz` | `200 {"status":"ready"}` | HTTP process can query PostgreSQL. |
+| Telegram Bot | `GET /healthz` on the Bot port | `200 {"status":"ok"}` | Webhook HTTP process is running; the probe does not invoke Telegram handling. |
+| Central Dispatch runtime | Admin operational dashboard | current healthy session and ready tabs | The local authenticated browser session is available for scans. |
+
+Use the API readiness endpoint for a load balancer or deployment readiness
+gate. Use liveness endpoints only to determine whether the process needs a
+restart; a successful liveness response does not prove PostgreSQL is available.
+
+## Alert thresholds
+
+Configure the production monitoring system to alert the on-call owner when any
+of the following persists beyond a transient retry window:
+
+| Signal | Threshold | First response |
+| --- | --- | --- |
+| API readiness | two consecutive failed checks | Check database availability and the API logs; keep the process out of traffic until `/readyz` recovers. |
+| Bot liveness | two failed checks or five minutes unavailable | Check the Bot process and the public route; do not rotate a webhook secret as an incident shortcut. |
+| Central Dispatch session/tab state | offline or degraded for five minutes | Confirm Chrome is running locally and the manually authenticated Central Dispatch page is still open. |
+| Browser scan failures | repeated failure for the same provider search | Review the safe scan classification in the Admin dashboard, then validate the provider page manually. |
+| Notification deliveries | any `dead_letter` row | Review the delivery attempt history and the affected customer before retrying or contacting them. |
+
+The Admin dashboard is the primary product-level view for browser session,
+tab, scan, delivery, and recovery state. It is protected by Telegram admin
+allowlists; use a viewer account for investigation and an operator account only
+for protected actions.
+
+## Incident response
+
+1. Record the UTC start time, affected service, symptoms, and the last known
+   healthy probe result.
+2. Identify scope with the relevant probe and Admin dashboard. Do not copy
+   provider pages, cookies, signed Telegram `initData`, or secrets into an
+   incident record.
+3. For an API readiness failure, restore PostgreSQL connectivity first; then
+   confirm `/readyz` before returning the API to traffic.
+4. For a Bot outage, restore the HTTP process and public webhook route, then
+   confirm Bot liveness. Telegram's retries and the webhook secret protect the
+   request boundary; keep the existing secret unless a compromise is confirmed.
+5. For a Central Dispatch outage, restore only the local, already-authenticated
+   browser session. The worker marks unavailable sessions offline and resumes
+   scans after a later healthy check; it must not persist browser credentials.
+6. For notification failures, the durable worker retries temporary failures
+   with exponential backoff and respects Telegram rate limits. Inspect a
+   dead-letter's attempt history rather than sending a manual duplicate.
+7. Record the resolution, customer impact, and any follow-up test or alert
+   threshold change.
+
+## Recovery and rollback checks
+
+Before a production release, confirm that all database migrations through
+`0011_admin_audit_log.sql` have been applied, then verify the API readiness and
+Bot liveness probes. If a release causes a customer-impacting regression,
+return to the last known-good application revision while preserving PostgreSQL
+data. Database migrations are forward-only: do not roll back schema by deleting
+records or applying ad-hoc destructive SQL during an incident.
+
+After a restore or failover exercise, verify that durable delivery claims and
+seen-load boundaries replay idempotently. The expected customer safety
+properties are one notification per load/alert/customer key and no silent loss
+of a new-load boundary after worker restart.

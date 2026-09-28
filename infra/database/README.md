@@ -15,9 +15,10 @@ psql "$DATABASE_URL" -f infra/database/migrations/0007_free_and_essential_plans.
 psql "$DATABASE_URL" -f infra/database/migrations/0008_referral_attribution.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0009_partner_eligibility.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0010_stripe_webhook_events.sql
+psql "$DATABASE_URL" -f infra/database/migrations/0011_admin_audit_log.sql
 ```
 
-The application must use three transactional patterns:
+The application must use four transactional patterns:
 
 1. Insert each provider load with `ON CONFLICT (provider, provider_load_id) DO NOTHING`; only an inserted row becomes a new-load event.
 2. Insert each notification with `ON CONFLICT (delivery_key) DO NOTHING`; `delivery_key` is `provider:provider_load_id:alert_id:user_id`.
