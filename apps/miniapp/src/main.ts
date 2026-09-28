@@ -14,11 +14,13 @@ import { readinessLabel, vehicleCountLabel } from "./alert-filter-summary.js";
 import { providerListLabel, providerMonitoringSummary } from "./provider-copy.js";
 import { readinessFromForm } from "./readiness-form.js";
 import { brokerDetailsLabel, loadFacts, safeLoadBoardUrl } from "./recent-load-details.js";
+import { telegramReferralShareUrl } from "./referral-share.js";
 
 interface TelegramWebApp {
   readonly initData: string;
   readonly initDataUnsafe?: { readonly user?: { readonly first_name?: string } };
   readonly themeParams?: Record<string, string | undefined>;
+  openTelegramLink?(url: string): void;
   ready(): void;
   expand(): void;
 }
@@ -132,7 +134,7 @@ function referralMarkup(): string {
     <div class="referral-heading"><div><p class="eyebrow">INVITE & EARN</p><h2>Referral program</h2></div><span>${referral.partnerProgressActivePaid} / ${referral.partnerUnlockAt}</span></div>
     <p class="referral-copy">${escapeHtml(progress)}</p>
     <div class="referral-stats"><span><strong>${referral.totalInvited}</strong> invited</span><span><strong>${referral.activePaid}</strong> active paid</span><span><strong>${escapeHtml(credit)}</strong></span></div>
-    <div class="referral-link"><code>${escapeHtml(referral.code)}</code><button class="secondary" type="button" data-copy-referral>Copy invite link</button></div>
+    <div class="referral-link"><code>${escapeHtml(referral.code)}</code><div class="referral-actions"><button class="secondary" type="button" data-share-referral>Share in Telegram</button><button class="secondary" type="button" data-copy-referral>Copy link</button></div></div>
   </section>`;
 }
 
@@ -285,6 +287,7 @@ function bindInteractions(): void {
   });
   app.querySelector<HTMLButtonElement>("[data-manage-subscription]")?.addEventListener("click", () => { void manageSubscription(); });
   app.querySelector<HTMLButtonElement>("[data-upgrade-essential]")?.addEventListener("click", () => { void upgradeToEssential(); });
+  app.querySelector<HTMLButtonElement>("[data-share-referral]")?.addEventListener("click", () => { void shareReferralLink(); });
   app.querySelector<HTMLButtonElement>("[data-copy-referral]")?.addEventListener("click", () => { void copyReferralLink(); });
   app.querySelector<HTMLButtonElement>("[data-refresh]")?.addEventListener("click", () => { void refresh(); });
 }
@@ -476,6 +479,21 @@ async function copyReferralLink(): Promise<void> {
     message = `Copy this invite code: ${referral.code}`;
   }
   render();
+}
+
+function shareReferralLink(): void {
+  if (referral === undefined) return;
+  try {
+    const shareUrl = telegramReferralShareUrl(referral.inviteLink);
+    if (telegram?.openTelegramLink !== undefined) {
+      telegram.openTelegramLink(shareUrl);
+      return;
+    }
+    window.open(shareUrl, "_blank", "noopener,noreferrer");
+  } catch (error: unknown) {
+    message = readableError(error);
+    render();
+  }
 }
 
 function updateBrokerUi(): void {
