@@ -46,3 +46,17 @@ test("admin client reads the protected operator audit trail", async () => {
   assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
   assert.equal(events[0]?.id, "audit-1");
 });
+
+test("admin client reads its role and sends a protected partner approval", async () => {
+  const requests: Array<{ input: string; method: string | undefined }> = [];
+  const client = new AdminApiClient("signed-init-data", "/api", async (input, init) => {
+    requests.push({ input: String(input), method: init?.method });
+    return new Response(JSON.stringify(String(input).endsWith("/access") ? { role: "operator" } : { partner: { status: "active" } }));
+  });
+  assert.equal(await client.getAccess(), "operator");
+  await client.approvePartner("11111111-1111-4111-8111-111111111111");
+  assert.deepEqual(requests, [
+    { input: "/api/v1/admin/access", method: undefined },
+    { input: "/api/v1/admin/partners/11111111-1111-4111-8111-111111111111/approve", method: "POST" }
+  ]);
+});

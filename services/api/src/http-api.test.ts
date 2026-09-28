@@ -195,6 +195,7 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
     assert.equal((await fetch(`${baseUrl}/v1/admin/audit-events`, { headers: { authorization: "tma customer" } })).status, 403);
     const audit = await fetch(`${baseUrl}/v1/admin/audit-events`, { headers: { authorization: "tma admin-telegram-id" } });
     assert.deepEqual(await audit.json(), { events: [{ id: "audit-1", action: "partner_approval_requested" }] });
+    assert.deepEqual(await (await fetch(`${baseUrl}/v1/admin/access`, { headers: { authorization: "tma admin-telegram-id" } })).json(), { role: "operator" });
     assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma customer" } })).status, 403);
     assert.deepEqual(auditEvents, []);
     const approved = await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } });
@@ -222,6 +223,7 @@ test("admin viewers can read operations but cannot approve partners", async () =
     if (address === null || typeof address === "string") throw new Error("Expected a TCP server address");
     const baseUrl = `http://127.0.0.1:${address.port}`;
     assert.equal((await fetch(`${baseUrl}/v1/admin/overview`, { headers: { authorization: "tma viewer-id" } })).status, 200);
+    assert.deepEqual(await (await fetch(`${baseUrl}/v1/admin/access`, { headers: { authorization: "tma viewer-id" } })).json(), { role: "viewer" });
     assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma viewer-id" } })).status, 403);
     assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma operator-id" } })).status, 200);
   } finally {

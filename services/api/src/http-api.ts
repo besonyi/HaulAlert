@@ -107,6 +107,11 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
         ? { statusCode: 200, body: { events: await dependencies.audit.getRecent() } }
         : { statusCode: 403, body: { error: "forbidden" } };
     }
+    if (pathname === "/v1/admin/access" && request.method === "GET") {
+      if (!hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
+      const role = roleFor(dependencies, user);
+      return role === undefined ? { statusCode: 403, body: { error: "forbidden" } } : { statusCode: 200, body: { role } };
+    }
     const partnerRoute = parseAdminPartnerRoute(pathname);
     if (partnerRoute !== undefined && request.method === "POST") {
       if (dependencies.partners === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };

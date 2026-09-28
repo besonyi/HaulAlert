@@ -36,6 +36,8 @@ export interface AdminAuditEvent {
   readonly createdAt: string;
 }
 
+export type AdminRole = "viewer" | "operator";
+
 export class AdminApiError extends Error {
   public constructor(readonly statusCode: number, readonly code: string) {
     super(code);
@@ -71,6 +73,22 @@ export class AdminApiClient {
     });
     if (!response.ok) throw await errorFrom(response);
     return (await response.json() as { events: AdminAuditEvent[] }).events;
+  }
+
+  public async getAccess(): Promise<AdminRole> {
+    const response = await this.request(`${this.baseUrl}/v1/admin/access`, {
+      headers: { authorization: `tma ${this.initData}` }
+    });
+    if (!response.ok) throw await errorFrom(response);
+    return (await response.json() as { role: AdminRole }).role;
+  }
+
+  public async approvePartner(userId: string): Promise<void> {
+    const response = await this.request(`${this.baseUrl}/v1/admin/partners/${encodeURIComponent(userId)}/approve`, {
+      method: "POST",
+      headers: { authorization: `tma ${this.initData}` }
+    });
+    if (!response.ok) throw await errorFrom(response);
   }
 }
 

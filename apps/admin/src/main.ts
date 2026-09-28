@@ -1,4 +1,4 @@
-import { AdminApiClient, AdminApiError, type AdminAuditEvent, type AdminSearchResults, type AdminSystemOverview, type OperationalCount, type OperationalRecoveryItem } from "./api.js";
+import { AdminApiClient, AdminApiError, type AdminAuditEvent, type AdminRole, type AdminSearchResults, type AdminSystemOverview, type OperationalCount, type OperationalRecoveryItem } from "./api.js";
 
 interface TelegramWebApp {
   readonly initData: string;
@@ -21,6 +21,7 @@ telegram?.expand();
 const client = telegram?.initData === undefined ? undefined : new AdminApiClient(telegram.initData);
 let currentOverview: AdminSystemOverview | undefined;
 let auditEvents: readonly AdminAuditEvent[] = [];
+let adminRole: AdminRole | undefined;
 let searchResults: AdminSearchResults | undefined;
 let searchTerm = "";
 let searchMessage = "";
@@ -33,7 +34,7 @@ async function refresh(): Promise<void> {
   }
   root.innerHTML = loadingMarkup();
   try {
-    [currentOverview, auditEvents] = await Promise.all([client.getOverview(), client.getAuditEvents()]);
+    [currentOverview, auditEvents, adminRole] = await Promise.all([client.getOverview(), client.getAuditEvents(), client.getAccess()]);
     renderOverview(currentOverview);
   } catch (error: unknown) {
     renderError(messageFor(error));
@@ -43,7 +44,7 @@ async function refresh(): Promise<void> {
 function renderOverview(overview: AdminSystemOverview): void {
   root.innerHTML = `<main class="shell">
     <header><div><p class="eyebrow">HAULALERT · OPERATIONS</p><h1>System health</h1></div><button class="refresh" type="button" data-refresh>Refresh</button></header>
-    <p class="operator">Signed in as ${escapeHtml(telegram?.initDataUnsafe?.user?.first_name ?? "operator")}</p>
+    <p class="operator">Signed in as ${escapeHtml(telegram?.initDataUnsafe?.user?.first_name ?? "operator")} · ${adminRole === "operator" ? "Operator" : "Viewer"}</p>
     <section class="totals" aria-label="System totals">
       ${total("Users", overview.users)}${total("Active alerts", overview.activeAlerts)}${total("Loads", overview.loads)}
     </section>
@@ -61,6 +62,9 @@ function renderOverview(overview: AdminSystemOverview): void {
     button.addEventListener("click", () => { void refresh(); });
   });
   root.querySelector<HTMLFormElement>("[data-search]")?.addEventListener("submit", (event) => { void search(event); });
+  root.querySelectorAll<HTMLButtonElement>("[data-approve-partner]").forEach((button) => {
+    button.addEventListener("click", () => { void approvePartner(button.dataset.approvePartner); });
+  });
 }
 
 function auditMarkup(events: readonly AdminAuditEvent[]): string {
@@ -103,15 +107,19 @@ function searchResultsMarkup(results: AdminSearchResults): string {
   const count = results.users.length + results.alerts.length + results.loads.length + results.deliveries.length;
   if (count === 0) return `<p class="empty">No matching operational records.</p>`;
   return `<div class="search-results">
-    ${searchGroup("Users", results.users.map((item) => simpleItem(`Telegram ${item.telegramUserId}`)))}
+    ${searchGroup("Users", results.users.map((item) => simpleItem(`Telegram ${item.telegramUserId}`, undefined, partnerApprovalMarkup(item.id))))}
     ${searchGroup("Alerts", results.alerts.map((item) => simpleItem(`${item.name} · ${item.status}`, `Telegram ${item.telegramUserId}`)))}
     ${searchGroup("Loads", results.loads.map((item) => simpleItem(`${item.provider}: ${item.providerLoadId}`, `${item.pickup} → ${item.delivery}`)))}
     ${searchGroup("Deliveries", results.deliveries.map((item) => simpleItem(`${item.alertName} · ${item.status}`, `${item.loadKey} · Telegram ${item.telegramUserId}`)))}
   </div>`;
 }
 
-function simpleItem(title: string, detail?: string): string {
-  return `<li><strong>${escapeHtml(title)}</strong>${detail === undefined ? "" : `<span>${escapeHtml(detail)}</span>`}</li>`;
+function simpleItem(title: string, detail?: string, action?: string): string {
+  return `<li><strong>${escapeHtml(title)}</strong>${detail === undefined ? "" : `<span>${escapeHtml(detail)}</span>`}${action ?? ""}</li>`;
+}
+
+function partnerApprovalMarkup(userId: string): string {
+  return adminRole === "operator" ? `<button class="partner-approve" type="button" data-approve-partner="${escapeHtml(userId)}">Approve partner</button>` : "";
 }
 
 function searchGroup(title: string, rows: readonly string[]): string {
@@ -136,6 +144,20 @@ async function search(event: SubmitEvent): Promise<void> {
   } catch (error: unknown) {
     searchResults = undefined;
     searchMessage = error instanceof AdminApiError && error.statusCode === 400 ? "Use between 2 and 80 characters." : "Search could not be completed. Try again shortly.";
+  }
+  renderOverview(currentOverview);
+}
+
+async function approvePartner(userId: string | undefined): Promise<void> {
+  if (client === undefined || currentOverview === undefined || userId === undefined || adminRole !== "operator") return;
+  try {
+    await client.approvePartner(userId);
+    auditEvents = await client.getAuditEvents();
+    searchMessage = "Partner approved and recorded in the audit trail.";
+  } catch (error: unknown) {
+    searchMessage = error instanceof AdminApiError && error.statusCode === 409
+      ? "This partner is no longer awaiting approval."
+      : "Partner approval could not be completed. Try again shortly.";
   }
   renderOverview(currentOverview);
 }
