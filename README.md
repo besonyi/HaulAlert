@@ -28,7 +28,7 @@ pnpm check
 
 To prepare Telegram delivery locally, copy `.env.example` to `.env` and set `TELEGRAM_BOT_TOKEN`. The token stays server-side; customers are addressed using the Telegram chat ID established during Bot onboarding. The PostgreSQL migration and transactional delivery rules are in [infra/database](infra/database/README.md).
 
-The internal admin page is a separate Telegram Mini App. Configure `ADMIN_TELEGRAM_USER_IDS` with the comma-separated numeric Telegram IDs permitted to use it; the API rejects every other account. Run it locally with `pnpm --filter @haulalert/admin start` (default port `3003`), after starting the API service.
+The internal admin page is a separate Telegram Mini App. Configure `ADMIN_VIEWER_TELEGRAM_USER_IDS` for read-only access and `ADMIN_OPERATOR_TELEGRAM_USER_IDS` for protected operator actions; the API rejects every other account. `ADMIN_TELEGRAM_USER_IDS` remains supported as a legacy full-access operator list. Run it locally with `pnpm --filter @haulalert/admin start` (default port `3003`), after starting the API service.
 
 Once PostgreSQL has been migrated and `.env` contains both `DATABASE_URL` and `TELEGRAM_BOT_TOKEN`, start the durable delivery worker with:
 

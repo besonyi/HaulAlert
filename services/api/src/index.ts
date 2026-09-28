@@ -38,7 +38,7 @@ export {
   type StripeWebhookEventProcessor
 } from "./stripe-webhook.js";
 export { PostgresTelegramUserResolver } from "./telegram-user-resolver.js";
-export { getAdminTelegramUserIds, isAdminTelegramUser } from "./admin-access.js";
+export { getAdminAccessConfig, getAdminRole, getAdminTelegramUserIds, isAdminTelegramUser, type AdminAccessConfig, type AdminRole } from "./admin-access.js";
 
 export type ManagedAlertStatus = "active" | "paused";
 

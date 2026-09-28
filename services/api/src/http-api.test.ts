@@ -205,3 +205,26 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
     await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
   }
 });
+
+test("admin viewers can read operations but cannot approve partners", async () => {
+  const server = createMiniAppApiServer({
+    alerts: {} as AlertManagementRepository,
+    dashboard: { getForUser: async () => ({ activeAlertCount: 0, loadsFoundLast24Hours: 0, recentNotifications: [] }) },
+    adminDashboard: { getOverview: async () => ({ users: 0, activeAlerts: 0, loads: 0, sessions: [], tabs: [], deliveries: [], recovery: [] }) },
+    partners: { approve: async () => ({ status: "active" }) },
+    adminRole: (telegramUserId) => telegramUserId === "viewer-id" ? "viewer" : telegramUserId === "operator-id" ? "operator" : undefined,
+    authenticate: (initData) => ({ id: initData, firstName: "Alex" })
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("Expected a TCP server address");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    assert.equal((await fetch(`${baseUrl}/v1/admin/overview`, { headers: { authorization: "tma viewer-id" } })).status, 200);
+    assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma viewer-id" } })).status, 403);
+    assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma operator-id" } })).status, 200);
+  } finally {
+    await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
+  }
+});

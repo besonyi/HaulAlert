@@ -42,6 +42,7 @@ export interface MiniAppApiDependencies {
   readonly stripeWebhook?: {
     handle(payload: Buffer, signatureHeader: string | undefined): Promise<unknown>;
   };
+  readonly adminRole?: (telegramUserId: string) => "viewer" | "operator" | undefined;
   readonly isAdmin?: (telegramUserId: string) => boolean;
   readonly authenticate: (initData: string) => AuthenticatedApiUser | Promise<AuthenticatedApiUser>;
 }
@@ -88,28 +89,28 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
 
   try {
     if (pathname === "/v1/admin/overview" && request.method === "GET") {
-      if (dependencies.adminDashboard === undefined || dependencies.isAdmin === undefined) return { statusCode: 404, body: { error: "not_found" } };
-      return dependencies.isAdmin(user.telegramUserId ?? user.id)
+      if (dependencies.adminDashboard === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
+      return roleFor(dependencies, user) !== undefined
         ? { statusCode: 200, body: { overview: await dependencies.adminDashboard.getOverview() } }
         : { statusCode: 403, body: { error: "forbidden" } };
     }
     if (pathname === "/v1/admin/search" && request.method === "GET") {
-      if (dependencies.adminSearch === undefined || dependencies.isAdmin === undefined) return { statusCode: 404, body: { error: "not_found" } };
-      if (!dependencies.isAdmin(user.telegramUserId ?? user.id)) return { statusCode: 403, body: { error: "forbidden" } };
+      if (dependencies.adminSearch === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
+      if (roleFor(dependencies, user) === undefined) return { statusCode: 403, body: { error: "forbidden" } };
       const query = url.searchParams.get("q")?.trim() ?? "";
       if (query.length < 2 || query.length > 80) return { statusCode: 400, body: { error: "invalid_search_query" } };
       return { statusCode: 200, body: { results: await dependencies.adminSearch.search(query) } };
     }
     if (pathname === "/v1/admin/audit-events" && request.method === "GET") {
-      if (dependencies.audit?.getRecent === undefined || dependencies.isAdmin === undefined) return { statusCode: 404, body: { error: "not_found" } };
-      return dependencies.isAdmin(user.telegramUserId ?? user.id)
+      if (dependencies.audit?.getRecent === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
+      return roleFor(dependencies, user) !== undefined
         ? { statusCode: 200, body: { events: await dependencies.audit.getRecent() } }
         : { statusCode: 403, body: { error: "forbidden" } };
     }
     const partnerRoute = parseAdminPartnerRoute(pathname);
     if (partnerRoute !== undefined && request.method === "POST") {
-      if (dependencies.partners === undefined || dependencies.isAdmin === undefined) return { statusCode: 404, body: { error: "not_found" } };
-      if (!dependencies.isAdmin(user.telegramUserId ?? user.id)) return { statusCode: 403, body: { error: "forbidden" } };
+      if (dependencies.partners === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
+      if (roleFor(dependencies, user) !== "operator") return { statusCode: 403, body: { error: "forbidden" } };
       if (!isUuid(partnerRoute.userId)) return { statusCode: 400, body: { error: "invalid_user_id" } };
       await dependencies.audit?.record({
         actorTelegramUserId: user.telegramUserId ?? user.id,
@@ -246,6 +247,15 @@ function parseAdminPartnerRoute(pathname: string): { readonly userId: string } |
   return segments[0] === "v1" && segments[1] === "admin" && segments[2] === "partners" && segments[4] === "approve" && segments.length === 5 && segments[3] !== undefined
     ? { userId: segments[3] }
     : undefined;
+}
+
+function hasAdminAccess(dependencies: MiniAppApiDependencies): boolean {
+  return dependencies.adminRole !== undefined || dependencies.isAdmin !== undefined;
+}
+
+function roleFor(dependencies: MiniAppApiDependencies, user: AuthenticatedApiUser): "viewer" | "operator" | undefined {
+  const telegramUserId = user.telegramUserId ?? user.id;
+  return dependencies.adminRole?.(telegramUserId) ?? (dependencies.isAdmin?.(telegramUserId) === true ? "operator" : undefined);
 }
 
 function isUuid(value: string): boolean {

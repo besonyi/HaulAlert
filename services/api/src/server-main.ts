@@ -6,14 +6,14 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminAuditRepository, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresSubscriptionPortalService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
+import { getAdminAccessConfig, getAdminRole, PostgresAdminAuditRepository, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresSubscriptionPortalService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type AdminAccessConfig, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
   readonly databaseUrl: string;
   readonly telegramBotToken: string;
   readonly port: number;
-  readonly adminTelegramUserIds: readonly string[];
+  readonly adminAccess: AdminAccessConfig;
   readonly telegramBotUsername: string;
   readonly stripeWebhookSecret: string | undefined;
   readonly stripeCheckout: StripeCheckoutConfig | undefined;
@@ -24,7 +24,7 @@ export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env)
     databaseUrl: getDatabaseUrl(environment),
     telegramBotToken: getTelegramBotToken(environment),
     port: getPort(environment.API_PORT),
-    adminTelegramUserIds: getAdminTelegramUserIds(environment.ADMIN_TELEGRAM_USER_IDS),
+    adminAccess: getAdminAccessConfig(environment),
     telegramBotUsername: getTelegramBotUsername(environment.TELEGRAM_BOT_USERNAME),
     stripeWebhookSecret: optionalStripeWebhookSecret(environment.STRIPE_WEBHOOK_SECRET),
     stripeCheckout: optionalStripeCheckoutConfig(environment)
@@ -63,7 +63,7 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
     ...(config.stripeWebhookSecret === undefined ? {} : {
       stripeWebhook: new StripeWebhookHandler(config.stripeWebhookSecret, new PostgresStripeWebhookEventProcessor(database))
     }),
-    isAdmin: (telegramUserId) => isAdminTelegramUser(telegramUserId, config.adminTelegramUserIds),
+    adminRole: (telegramUserId) => getAdminRole(telegramUserId, config.adminAccess),
     authenticate: async (initData) => {
       const telegram = verifyTelegramMiniAppInitData(initData, config.telegramBotToken);
       const userId = await telegramUsers.resolve(telegram.id);
