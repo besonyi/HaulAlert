@@ -24,6 +24,12 @@ test("HTTP server forwards only the configured webhook path to the handler", asy
     if (address === null || typeof address === "string") throw new Error("Expected a TCP server address");
     const baseUrl = `http://127.0.0.1:${address.port}`;
 
+    const health = await fetch(`${baseUrl}/healthz`);
+    assert.equal(health.status, 200);
+    assert.deepEqual(await health.json(), { status: "ok" });
+    assert.equal((await fetch(`${baseUrl}/healthz`, { method: "POST" })).status, 405);
+    assert.equal(received.length, 0);
+
     const accepted = await fetch(`${baseUrl}/telegram/webhook`, {
       method: "POST",
       headers: { "x-telegram-bot-api-secret-token": "correct-secret" },

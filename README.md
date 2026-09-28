@@ -66,6 +66,9 @@ To receive Telegram updates, set the same `TELEGRAM_WEBHOOK_SECRET` in Telegram'
 pnpm --filter @haulalert/bot start
 ```
 
+The Bot also exposes public `GET /healthz` liveness on its own HTTP port; it does
+not invoke the webhook handler or expose Telegram credentials.
+
 The Mini App calls the authenticated alert API using its signed Telegram `initData`; start it with:
 
 ```bash

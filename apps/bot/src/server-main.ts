@@ -15,11 +15,11 @@ import { PostgresAlertMuteStore, PostgresTelegramIdentityStore, TelegramBotOnboa
 import {
   getTelegramWebhookSecret,
   TelegramWebhookHandler,
-  type TelegramWebhookRequest,
-  type TelegramWebhookResponse
+  type TelegramWebhookRequest
 } from "./webhook.js";
 
 const maximumRequestBodyBytes = 1_000_000;
+const healthPath = "/healthz";
 
 export interface BotServerConfig {
   readonly databaseUrl: string;
@@ -50,7 +50,13 @@ export function createTelegramWebhookServer(
     void handleHttpRequest(request, webhookPath, handler)
       .then((result) => {
         response.statusCode = result.statusCode;
-        response.end();
+        response.setHeader("cache-control", "no-store");
+        if (result.body === undefined) {
+          response.end();
+          return;
+        }
+        response.setHeader("content-type", "application/json; charset=utf-8");
+        response.end(JSON.stringify(result.body));
       })
       .catch((error: unknown) => {
         const statusCode = error instanceof RequestBodyTooLargeError ? 413 : 500;
@@ -89,7 +95,12 @@ async function handleHttpRequest(
   request: IncomingMessage,
   webhookPath: string,
   handler: Pick<TelegramWebhookHandler, "handle">
-): Promise<TelegramWebhookResponse | { readonly statusCode: 404 }> {
+): Promise<HttpResponse> {
+  if (request.url === healthPath) {
+    return request.method === "GET"
+      ? { statusCode: 200, body: { status: "ok" } }
+      : { statusCode: 405, body: { error: "method_not_allowed" } };
+  }
   if (request.url !== webhookPath) return { statusCode: 404 };
 
   const webhookRequest: TelegramWebhookRequest = {
@@ -99,6 +110,8 @@ async function handleHttpRequest(
   };
   return handler.handle(webhookRequest);
 }
+
+type HttpResponse = { readonly statusCode: 200 | 400 | 401 | 404 | 405; readonly body?: unknown };
 
 async function readBody(request: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
