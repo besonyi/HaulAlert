@@ -11,6 +11,7 @@ import { normalizedLoadSchema, type NormalizedLoad } from "@haulalert/load-model
 import type { SqlExecutor } from "@haulalert/notification-service";
 
 export { PostgresAdminDashboardRepository, type AdminSystemOverview, type OperationalCount } from "./admin-dashboard.js";
+export { PostgresAdminAuditRepository, type AdminAuditEventInput } from "./admin-audit.js";
 export { PostgresAdminSearchRepository, normalizeAdminSearchQuery, type AdminSearchResults } from "./admin-search.js";
 export { PostgresBrokerDirectoryRepository, normalizeBrokerQuery, type BrokerProfile } from "./broker-directory.js";
 export { InactiveSubscriptionError, PlanLimitExceededError, PostgresEntitlementRepository, type AccountEntitlement } from "./entitlements.js";

@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresSubscriptionPortalService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
+import { getAdminTelegramUserIds, isAdminTelegramUser, PostgresAdminAuditRepository, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresSubscriptionPortalService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
@@ -37,6 +37,7 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
   const database = new PgPoolSqlExecutor(pool);
   const telegramUsers = new PostgresTelegramUserResolver(database);
   const partners = new PostgresPartnerAccountRepository(database);
+  const audit = new PostgresAdminAuditRepository(database);
   const referrals = new PostgresReferralRepository(database);
   const checkout = config.stripeCheckout === undefined ? undefined : new StripeCheckoutClient(config.stripeCheckout);
   const billing = checkout === undefined ? undefined : {
@@ -57,6 +58,7 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
       )
     },
     partners,
+    audit,
     ...(billing === undefined ? {} : { billing }),
     ...(config.stripeWebhookSecret === undefined ? {} : {
       stripeWebhook: new StripeWebhookHandler(config.stripeWebhookSecret, new PostgresStripeWebhookEventProcessor(database))

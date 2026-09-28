@@ -31,6 +31,9 @@ export interface MiniAppApiDependencies {
   readonly partners?: {
     approve(userId: string): Promise<unknown | undefined>;
   };
+  readonly audit?: {
+    record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested"; readonly subjectUserId: string }): Promise<void>;
+  };
   readonly billing?: {
     createEssentialCheckout(userId: string): Promise<{ readonly url: string }>;
     createPortal(userId: string): Promise<{ readonly url: string }>;
@@ -101,6 +104,11 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       if (dependencies.partners === undefined || dependencies.isAdmin === undefined) return { statusCode: 404, body: { error: "not_found" } };
       if (!dependencies.isAdmin(user.telegramUserId ?? user.id)) return { statusCode: 403, body: { error: "forbidden" } };
       if (!isUuid(partnerRoute.userId)) return { statusCode: 400, body: { error: "invalid_user_id" } };
+      await dependencies.audit?.record({
+        actorTelegramUserId: user.telegramUserId ?? user.id,
+        action: "partner_approval_requested",
+        subjectUserId: partnerRoute.userId
+      });
       const partner = await dependencies.partners.approve(partnerRoute.userId);
       return partner === undefined ? { statusCode: 409, body: { error: "partner_unavailable" } } : { statusCode: 200, body: { partner } };
     }
