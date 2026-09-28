@@ -34,3 +34,15 @@ test("admin client encodes a bounded operations search", async () => {
   await client.search("CA AZ");
   assert.equal(path, "/api/v1/admin/search?q=CA%20AZ");
 });
+
+test("admin client reads the protected operator audit trail", async () => {
+  let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
+  const client = new AdminApiClient("signed-init-data", "/api", async (input, init) => {
+    captured = { input, ...(init === undefined ? {} : { init }) };
+    return new Response(JSON.stringify({ events: [{ id: "audit-1", action: "partner_approval_requested" }] }));
+  });
+  const events = await client.getAuditEvents();
+  assert.equal(captured?.input, "/api/v1/admin/audit-events");
+  assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
+  assert.equal(events[0]?.id, "audit-1");
+});

@@ -1,4 +1,4 @@
-import { AdminApiClient, AdminApiError, type AdminSearchResults, type AdminSystemOverview, type OperationalCount, type OperationalRecoveryItem } from "./api.js";
+import { AdminApiClient, AdminApiError, type AdminAuditEvent, type AdminSearchResults, type AdminSystemOverview, type OperationalCount, type OperationalRecoveryItem } from "./api.js";
 
 interface TelegramWebApp {
   readonly initData: string;
@@ -20,6 +20,7 @@ telegram?.expand();
 
 const client = telegram?.initData === undefined ? undefined : new AdminApiClient(telegram.initData);
 let currentOverview: AdminSystemOverview | undefined;
+let auditEvents: readonly AdminAuditEvent[] = [];
 let searchResults: AdminSearchResults | undefined;
 let searchTerm = "";
 let searchMessage = "";
@@ -32,7 +33,7 @@ async function refresh(): Promise<void> {
   }
   root.innerHTML = loadingMarkup();
   try {
-    currentOverview = await client.getOverview();
+    [currentOverview, auditEvents] = await Promise.all([client.getOverview(), client.getAuditEvents()]);
     renderOverview(currentOverview);
   } catch (error: unknown) {
     renderError(messageFor(error));
@@ -52,6 +53,7 @@ function renderOverview(overview: AdminSystemOverview): void {
       ${group("Delivery outcomes", overview.deliveries, "No delivery outcomes recorded.")}
     </section>
     ${recoveryMarkup(overview.recovery)}
+    ${auditMarkup(auditEvents)}
     ${searchMarkup()}
     <p class="footnote">Operational counts are credential-free and refresh on demand.</p>
   </main>`;
@@ -59,6 +61,11 @@ function renderOverview(overview: AdminSystemOverview): void {
     button.addEventListener("click", () => { void refresh(); });
   });
   root.querySelector<HTMLFormElement>("[data-search]")?.addEventListener("submit", (event) => { void search(event); });
+}
+
+function auditMarkup(events: readonly AdminAuditEvent[]): string {
+  if (events.length === 0) return `<section class="audit"><h2>Operator audit trail</h2><p>No privileged actions recorded yet.</p></section>`;
+  return `<section class="audit"><h2>Operator audit trail</h2><div class="audit-list">${events.map((event) => `<article><strong>${escapeHtml(event.action.replaceAll("_", " "))}</strong><span>Operator ${escapeHtml(event.actorTelegramUserId)} · customer ${escapeHtml(shortId(event.subjectUserId))}</span><span>${escapeHtml(formatTime(event.createdAt))}</span></article>`).join("")}</div></section>`;
 }
 
 function renderError(message: string): void {
@@ -154,6 +161,10 @@ function recoveryAction(item: OperationalRecoveryItem): string {
 function formatTime(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function shortId(value: string): string {
+  return value.length > 12 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value;
 }
 
 function messageFor(error: unknown): string {

@@ -33,6 +33,7 @@ export interface MiniAppApiDependencies {
   };
   readonly audit?: {
     record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested"; readonly subjectUserId: string }): Promise<void>;
+    getRecent?(): Promise<unknown>;
   };
   readonly billing?: {
     createEssentialCheckout(userId: string): Promise<{ readonly url: string }>;
@@ -98,6 +99,12 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       const query = url.searchParams.get("q")?.trim() ?? "";
       if (query.length < 2 || query.length > 80) return { statusCode: 400, body: { error: "invalid_search_query" } };
       return { statusCode: 200, body: { results: await dependencies.adminSearch.search(query) } };
+    }
+    if (pathname === "/v1/admin/audit-events" && request.method === "GET") {
+      if (dependencies.audit?.getRecent === undefined || dependencies.isAdmin === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      return dependencies.isAdmin(user.telegramUserId ?? user.id)
+        ? { statusCode: 200, body: { events: await dependencies.audit.getRecent() } }
+        : { statusCode: 403, body: { error: "forbidden" } };
     }
     const partnerRoute = parseAdminPartnerRoute(pathname);
     if (partnerRoute !== undefined && request.method === "POST") {
