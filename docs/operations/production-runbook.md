@@ -69,6 +69,8 @@ records or applying ad-hoc destructive SQL during an incident.
 Follow the [PostgreSQL backup and restore procedure](postgres-backup-restore.md)
 for rehearsals and incident recovery. Backup scheduling, retention, and recovery
 ownership must be configured by the production deployment owner before launch.
+Use the [go-live checklist](go-live-checklist.md) to record the release evidence
+and the remaining production-owner decisions before expanding a beta.
 
 After a restore or failover exercise, verify that durable delivery claims and
 seen-load boundaries replay idempotently. The expected customer safety

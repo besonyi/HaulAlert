@@ -81,6 +81,8 @@ JSON and never require Telegram Mini App authentication.
 
 Production probe thresholds, safe incident response, and rollback checks are in
 [the production operations runbook](docs/operations/production-runbook.md).
+The release gates for a controlled beta are in the
+[go-live checklist](docs/operations/go-live-checklist.md).
 
 ### Stripe Checkout
 
