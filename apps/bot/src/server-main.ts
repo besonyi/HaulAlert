@@ -51,6 +51,7 @@ export function createTelegramWebhookServer(
       .then((result) => {
         response.statusCode = result.statusCode;
         response.setHeader("cache-control", "no-store");
+        setHttpSecurityHeaders(response);
         if (result.body === undefined) {
           response.end();
           return;
@@ -61,6 +62,8 @@ export function createTelegramWebhookServer(
       .catch((error: unknown) => {
         const statusCode = error instanceof RequestBodyTooLargeError ? 413 : 500;
         response.statusCode = statusCode;
+        response.setHeader("cache-control", "no-store");
+        setHttpSecurityHeaders(response);
         response.end();
       });
   });
@@ -112,6 +115,12 @@ async function handleHttpRequest(
 }
 
 type HttpResponse = { readonly statusCode: 200 | 400 | 401 | 404 | 405; readonly body?: unknown };
+
+function setHttpSecurityHeaders(response: import("node:http").ServerResponse): void {
+  response.setHeader("x-content-type-options", "nosniff");
+  response.setHeader("x-frame-options", "DENY");
+  response.setHeader("referrer-policy", "no-referrer");
+}
 
 async function readBody(request: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];

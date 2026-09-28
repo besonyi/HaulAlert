@@ -27,6 +27,9 @@ test("HTTP server forwards only the configured webhook path to the handler", asy
     const health = await fetch(`${baseUrl}/healthz`);
     assert.equal(health.status, 200);
     assert.deepEqual(await health.json(), { status: "ok" });
+    assert.equal(health.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(health.headers.get("x-frame-options"), "DENY");
+    assert.equal(health.headers.get("referrer-policy"), "no-referrer");
     assert.equal((await fetch(`${baseUrl}/healthz`, { method: "POST" })).status, 405);
     assert.equal(received.length, 0);
 

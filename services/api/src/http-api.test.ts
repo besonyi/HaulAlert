@@ -151,7 +151,11 @@ test("health endpoints are public while readiness verifies the configured depend
     const address = server.address();
     if (address === null || typeof address === "string") throw new Error("Expected a TCP server address");
     const baseUrl = `http://127.0.0.1:${address.port}`;
-    assert.deepEqual(await (await fetch(`${baseUrl}/healthz`)).json(), { status: "ok" });
+    const health = await fetch(`${baseUrl}/healthz`);
+    assert.deepEqual(await health.json(), { status: "ok" });
+    assert.equal(health.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(health.headers.get("x-frame-options"), "DENY");
+    assert.equal(health.headers.get("referrer-policy"), "no-referrer");
     assert.deepEqual(await (await fetch(`${baseUrl}/readyz`)).json(), { status: "ready" });
     assert.equal(readinessChecks, 1);
     assert.equal((await fetch(`${baseUrl}/healthz`, { method: "POST" })).status, 405);

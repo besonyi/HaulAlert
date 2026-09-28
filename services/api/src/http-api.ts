@@ -287,12 +287,19 @@ function isUuid(value: string): boolean {
 function writeJson(response: ServerResponse, statusCode: number, body: unknown): void {
   response.statusCode = statusCode;
   response.setHeader("cache-control", "no-store");
+  setHttpSecurityHeaders(response);
   if (statusCode === 204) {
     response.end();
     return;
   }
   response.setHeader("content-type", "application/json; charset=utf-8");
   response.end(JSON.stringify(body));
+}
+
+function setHttpSecurityHeaders(response: ServerResponse): void {
+  response.setHeader("x-content-type-options", "nosniff");
+  response.setHeader("x-frame-options", "DENY");
+  response.setHeader("referrer-policy", "no-referrer");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
