@@ -1,5 +1,7 @@
 import type { SqlExecutor } from "@haulalert/notification-service";
 
+const defaultStripeRequestTimeoutMs = 10_000;
+
 export interface StripeCheckoutSession {
   readonly url: string;
 }
@@ -19,8 +21,13 @@ export class SubscriptionAlreadyEssentialError extends Error {}
 export class StripeCheckoutClient {
   public constructor(
     private readonly config: StripeCheckoutConfig,
-    private readonly request: typeof fetch = fetch
-  ) {}
+    private readonly request: typeof fetch = fetch,
+    private readonly requestTimeoutMs: number = defaultStripeRequestTimeoutMs
+  ) {
+    if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 1) {
+      throw new Error("Stripe request timeout must be a positive integer");
+    }
+  }
 
   public async createEssentialCheckout(userId: string, customerId: string | null): Promise<StripeCheckoutSession> {
     const form = new URLSearchParams({
@@ -34,14 +41,7 @@ export class StripeCheckoutClient {
       "subscription_data[metadata][haulalert_user_id]": userId
     });
     if (customerId !== null) form.set("customer", customerId);
-    const response = await this.request("https://api.stripe.com/v1/checkout/sessions", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${this.config.secretKey}`,
-        "content-type": "application/x-www-form-urlencoded"
-      },
-      body: form
-    });
+    const response = await this.post("checkout/sessions", form);
     const payload = await response.json().catch(() => undefined) as unknown;
     if (!response.ok || !isRecord(payload) || typeof payload.url !== "string" || !isHttpUrl(payload.url)) {
       throw new StripeCheckoutUnavailableError();
@@ -50,16 +50,32 @@ export class StripeCheckoutClient {
   }
 
   public async createBillingPortal(customerId: string): Promise<StripeCheckoutSession> {
-    const response = await this.request("https://api.stripe.com/v1/billing_portal/sessions", {
-      method: "POST",
-      headers: { authorization: `Bearer ${this.config.secretKey}`, "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ customer: customerId, return_url: this.config.portalReturnUrl })
-    });
+    const response = await this.post(
+      "billing_portal/sessions",
+      new URLSearchParams({ customer: customerId, return_url: this.config.portalReturnUrl })
+    );
     const payload = await response.json().catch(() => undefined) as unknown;
     if (!response.ok || !isRecord(payload) || typeof payload.url !== "string" || !isHttpUrl(payload.url)) {
       throw new StripeCheckoutUnavailableError();
     }
     return { url: payload.url };
+  }
+
+  private async post(path: "checkout/sessions" | "billing_portal/sessions", body: URLSearchParams): Promise<Response> {
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), this.requestTimeoutMs);
+    try {
+      return await this.request(`https://api.stripe.com/v1/${path}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${this.config.secretKey}`, "content-type": "application/x-www-form-urlencoded" },
+        body,
+        signal: abortController.signal
+      });
+    } catch {
+      throw new StripeCheckoutUnavailableError();
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { PostgresSubscriptionCheckoutService, StripeCheckoutClient, SubscriptionAlreadyEssentialError } from "./stripe-billing.js";
+import { PostgresSubscriptionCheckoutService, StripeCheckoutClient, StripeCheckoutUnavailableError, SubscriptionAlreadyEssentialError } from "./stripe-billing.js";
 
 const config = {
   secretKey: "sk_test_example", essentialPriceId: "price_essential",
@@ -44,4 +44,21 @@ test("an Essential account opens the short-lived Stripe billing portal instead o
   assert.equal(request?.input, "https://api.stripe.com/v1/billing_portal/sessions");
   assert.match(String(request?.init?.body), /customer=cus_existing/);
   assert.match(String(request?.init?.body), /return_url=https%3A%2F%2Fhaulalert.example%2Faccount/);
+});
+
+test("a stalled Stripe call is aborted and reported as temporarily unavailable", async () => {
+  const client = new StripeCheckoutClient(config, async (_input, init) => (
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+    })
+  ), 5);
+
+  await assert.rejects(
+    () => client.createEssentialCheckout(userId, null),
+    (error: unknown) => error instanceof StripeCheckoutUnavailableError
+  );
+});
+
+test("Stripe checkout rejects an invalid request timeout", () => {
+  assert.throws(() => new StripeCheckoutClient(config, globalThis.fetch, 0), /Stripe request timeout/);
 });
