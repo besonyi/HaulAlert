@@ -107,6 +107,25 @@ describe("Telegram Bot API transport", () => {
     });
   });
 
+  it("sends a Mini App launch button in a private Bot response", async () => {
+    let request: Request | undefined;
+    const transport = new TelegramBotApiTransport("test-token", async (input, init) => {
+      request = new Request(input, init);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    await transport.sendMiniAppLaunch("12345", "Welcome to HaulAlert", "https://app.haulalert.example");
+
+    assert.deepEqual(await request?.json(), {
+      chat_id: "12345",
+      text: "Welcome to HaulAlert",
+      disable_web_page_preview: true,
+      reply_markup: {
+        inline_keyboard: [[{ text: "OPEN HAULALERT", web_app: { url: "https://app.haulalert.example" } }]]
+      }
+    });
+  });
+
   it("requires an explicitly configured bot token", () => {
     assert.throws(() => getTelegramBotToken({}), /TELEGRAM_BOT_TOKEN/);
     assert.equal(getTelegramBotToken({ TELEGRAM_BOT_TOKEN: " 123:secret " }), "123:secret");

@@ -63,6 +63,18 @@ export class TelegramBotApiTransport implements TelegramTransport {
     });
   }
 
+  /** Sends a private-chat launch control for the customer-facing Telegram Mini App. */
+  public async sendMiniAppLaunch(recipientId: string, text: string, miniAppUrl: string): Promise<void> {
+    await this.sendMessage({
+      chat_id: recipientId,
+      text,
+      disable_web_page_preview: true,
+      reply_markup: {
+        inline_keyboard: [[{ text: "OPEN HAULALERT", web_app: { url: miniAppUrl } }]]
+      }
+    });
+  }
+
   /** Acknowledges a pressed inline control so Telegram stops showing its loading indicator. */
   public async answerCallbackQuery(callbackQueryId: string, text: string): Promise<void> {
     await this.callTelegram("answerCallbackQuery", { callback_query_id: callbackQueryId, text });

@@ -53,6 +53,10 @@ export interface TelegramTextTransport {
   sendText(recipientId: string, text: string): Promise<void>;
 }
 
+export interface TelegramMiniAppLaunchTransport {
+  sendMiniAppLaunch(recipientId: string, text: string, miniAppUrl: string): Promise<void>;
+}
+
 export interface TelegramCallbackTransport {
   answerCallbackQuery(callbackQueryId: string, text: string): Promise<void>;
 }
@@ -85,8 +89,9 @@ export type BotUpdateResult =
 export class TelegramBotOnboardingService {
   public constructor(
     private readonly identities: TelegramIdentityStore,
-    private readonly transport: TelegramTextTransport & Partial<TelegramCallbackTransport>,
-    private readonly alerts?: AlertMuteStore
+    private readonly transport: TelegramTextTransport & Partial<TelegramCallbackTransport & TelegramMiniAppLaunchTransport>,
+    private readonly alerts?: AlertMuteStore,
+    private readonly miniAppUrl?: string
   ) {}
 
   public async handle(update: TelegramUpdate): Promise<BotUpdateResult> {
@@ -110,7 +115,12 @@ export class TelegramBotOnboardingService {
       telegramChatId,
       ...(referralCode === undefined ? {} : { referralCode })
     });
-    await this.transport.sendText(telegramChatId, welcomeText(account.isNew));
+    const text = welcomeText(account.isNew);
+    if (this.miniAppUrl !== undefined && this.transport.sendMiniAppLaunch !== undefined) {
+      await this.transport.sendMiniAppLaunch(telegramChatId, text, this.miniAppUrl);
+    } else {
+      await this.transport.sendText(telegramChatId, text);
+    }
     return { status: "onboarded", ...account };
   }
 

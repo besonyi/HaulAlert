@@ -51,10 +51,12 @@ test("Bot server configuration validates its public HTTP settings", () => {
     TELEGRAM_BOT_TOKEN: "token",
     TELEGRAM_WEBHOOK_SECRET: "a-secure-webhook-secret",
     TELEGRAM_WEBHOOK_PATH: "/incoming/telegram",
+    TELEGRAM_MINIAPP_URL: "https://app.haulalert.example",
     PORT: "8080"
   });
   assert.equal(configuration.port, 8080);
   assert.equal(configuration.webhookPath, "/incoming/telegram");
+  assert.equal(configuration.miniAppUrl, "https://app.haulalert.example/");
 
   assert.throws(
     () => getBotServerConfig({
@@ -64,5 +66,14 @@ test("Bot server configuration validates its public HTTP settings", () => {
       PORT: "0"
     }),
     /PORT must be an integer/
+  );
+  assert.throws(
+    () => getBotServerConfig({
+      DATABASE_URL: "postgresql://example",
+      TELEGRAM_BOT_TOKEN: "token",
+      TELEGRAM_WEBHOOK_SECRET: "a-secure-webhook-secret",
+      TELEGRAM_MINIAPP_URL: "http://app.haulalert.example"
+    }),
+    /TELEGRAM_MINIAPP_URL/
   );
 });

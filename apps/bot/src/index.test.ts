@@ -46,6 +46,28 @@ describe("Telegram Bot onboarding", () => {
     assert.deepEqual(input, { telegramUserId: "12345", telegramChatId: "12345", referralCode: "A7K92D4F" });
   });
 
+  it("opens the configured Mini App from the onboarding response", async () => {
+    const launches: Array<{ recipientId: string; text: string; url: string }> = [];
+    const service = new TelegramBotOnboardingService(
+      { upsert: async () => ({ userId: "user-3", isNew: true }) },
+      {
+        sendText: async () => { throw new Error("Expected a Mini App launch button"); },
+        sendMiniAppLaunch: async (recipientId, text, url) => { launches.push({ recipientId, text, url }); }
+      },
+      undefined,
+      "https://app.haulalert.example"
+    );
+
+    await service.handle({
+      message: { text: "/start", from: { id: 12345 }, chat: { id: 12345, type: "private" } }
+    });
+    assert.deepEqual(launches, [{
+      recipientId: "12345",
+      text: "Welcome to HaulAlert. You are connected — create an alert and we will message you when a matching load appears.",
+      url: "https://app.haulalert.example"
+    }]);
+  });
+
   it("ignores non-private messages and non-start commands", async () => {
     const service = new TelegramBotOnboardingService(
       { upsert: async () => ({ userId: "user-1", isNew: true }) },

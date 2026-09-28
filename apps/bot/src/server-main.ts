@@ -26,6 +26,7 @@ export interface BotServerConfig {
   readonly telegramBotToken: string;
   readonly webhookSecret: string;
   readonly webhookPath: string;
+  readonly miniAppUrl: string | undefined;
   readonly port: number;
 }
 
@@ -35,6 +36,7 @@ export function getBotServerConfig(environment: NodeJS.ProcessEnv = process.env)
     telegramBotToken: getTelegramBotToken(environment),
     webhookSecret: getTelegramWebhookSecret(environment),
     webhookPath: getWebhookPath(environment.TELEGRAM_WEBHOOK_PATH),
+    miniAppUrl: getMiniAppUrl(environment.TELEGRAM_MINIAPP_URL),
     port: getPort(environment.PORT)
   };
 }
@@ -65,7 +67,8 @@ export async function runBotServer(config: BotServerConfig = getBotServerConfig(
   const onboarding = new TelegramBotOnboardingService(
     new PostgresTelegramIdentityStore(database),
     new TelegramBotApiTransport(config.telegramBotToken),
-    new PostgresAlertMuteStore(database)
+    new PostgresAlertMuteStore(database),
+    config.miniAppUrl
   );
   const server = createTelegramWebhookServer(
     new TelegramWebhookHandler(config.webhookSecret, onboarding),
@@ -119,6 +122,19 @@ function getWebhookPath(value: string | undefined): string {
   const path = value?.trim() || "/telegram/webhook";
   if (!path.startsWith("/")) throw new Error("TELEGRAM_WEBHOOK_PATH must start with a slash");
   return path;
+}
+
+function getMiniAppUrl(value: string | undefined): string | undefined {
+  const configured = value?.trim();
+  if (configured === undefined || configured.length === 0) return undefined;
+  let url: URL;
+  try {
+    url = new URL(configured);
+  } catch {
+    throw new Error("TELEGRAM_MINIAPP_URL must be a valid HTTPS URL");
+  }
+  if (url.protocol !== "https:") throw new Error("TELEGRAM_MINIAPP_URL must be a valid HTTPS URL");
+  return url.href;
 }
 
 function getPort(value: string | undefined): number {
