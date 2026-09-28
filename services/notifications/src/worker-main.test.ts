@@ -17,7 +17,8 @@ describe("notification worker runtime config", () => {
       pollIntervalMs: 1_000,
       maximumAttempts: 3,
       initialRetryDelayMs: 5_000,
-      claimLeaseDurationMs: 300_000
+      claimLeaseDurationMs: 300_000,
+      telegramRequestTimeoutMs: 10_000
     });
   });
 
@@ -28,7 +29,8 @@ describe("notification worker runtime config", () => {
       NOTIFICATION_WORKER_POLL_INTERVAL_MS: "250",
       NOTIFICATION_WORKER_MAXIMUM_ATTEMPTS: "5",
       NOTIFICATION_WORKER_INITIAL_RETRY_DELAY_MS: "750",
-      NOTIFICATION_WORKER_CLAIM_LEASE_DURATION_MS: "60000"
+      NOTIFICATION_WORKER_CLAIM_LEASE_DURATION_MS: "60000",
+      NOTIFICATION_WORKER_TELEGRAM_REQUEST_TIMEOUT_MS: "12000"
     });
 
     assert.deepEqual({
@@ -36,13 +38,15 @@ describe("notification worker runtime config", () => {
       pollIntervalMs: config.pollIntervalMs,
       maximumAttempts: config.maximumAttempts,
       initialRetryDelayMs: config.initialRetryDelayMs,
-      claimLeaseDurationMs: config.claimLeaseDurationMs
+      claimLeaseDurationMs: config.claimLeaseDurationMs,
+      telegramRequestTimeoutMs: config.telegramRequestTimeoutMs
     }, {
       batchSize: 10,
       pollIntervalMs: 250,
       maximumAttempts: 5,
       initialRetryDelayMs: 750,
-      claimLeaseDurationMs: 60_000
+      claimLeaseDurationMs: 60_000,
+      telegramRequestTimeoutMs: 12_000
     });
   });
 

@@ -16,6 +16,7 @@ export interface NotificationWorkerRuntimeConfig {
   readonly maximumAttempts: number;
   readonly initialRetryDelayMs: number;
   readonly claimLeaseDurationMs: number;
+  readonly telegramRequestTimeoutMs: number;
 }
 
 export function getNotificationWorkerRuntimeConfig(
@@ -44,6 +45,11 @@ export function getNotificationWorkerRuntimeConfig(
       environment.NOTIFICATION_WORKER_CLAIM_LEASE_DURATION_MS,
       300_000,
       "NOTIFICATION_WORKER_CLAIM_LEASE_DURATION_MS"
+    ),
+    telegramRequestTimeoutMs: getPositiveInteger(
+      environment.NOTIFICATION_WORKER_TELEGRAM_REQUEST_TIMEOUT_MS,
+      10_000,
+      "NOTIFICATION_WORKER_TELEGRAM_REQUEST_TIMEOUT_MS"
     )
   };
 }
@@ -56,7 +62,7 @@ export async function runNotificationWorker(
   const repository = new PostgresNotificationDeliveryRepository(new PgPoolSqlExecutor(pool));
   const worker = new PostgresNotificationWorker(
     repository,
-    new TelegramBotApiTransport(config.telegramBotToken),
+    new TelegramBotApiTransport(config.telegramBotToken, globalThis.fetch, config.telegramRequestTimeoutMs),
     {
       maximumAttempts: config.maximumAttempts,
       initialRetryDelayMs: config.initialRetryDelayMs,

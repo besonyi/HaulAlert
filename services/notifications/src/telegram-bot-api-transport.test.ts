@@ -4,7 +4,8 @@ import { describe, it } from "node:test";
 import {
   getTelegramBotToken,
   TelegramBotApiTransport,
-  TelegramRateLimitError
+  TelegramRateLimitError,
+  TelegramRequestTimeoutError
 } from "./telegram-bot-api-transport.js";
 
 describe("Telegram Bot API transport", () => {
@@ -88,6 +89,26 @@ describe("Telegram Bot API transport", () => {
     await assert.rejects(
       () => transport.send({ recipientId: "12345", notification: { text: "test", actions: [] } }),
       (error: unknown) => error instanceof TelegramRateLimitError && error.retryAfterMs === 7_000
+    );
+  });
+
+  it("aborts a stalled Telegram request so a worker cycle can recover", async () => {
+    const transport = new TelegramBotApiTransport("test-token", async (_input, init) => (
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+      })
+    ), 5);
+
+    await assert.rejects(
+      () => transport.send({ recipientId: "12345", notification: { text: "test", actions: [] } }),
+      (error: unknown) => error instanceof TelegramRequestTimeoutError && error.timeoutMs === 5
+    );
+  });
+
+  it("rejects an invalid Telegram request timeout", () => {
+    assert.throws(
+      () => new TelegramBotApiTransport("test-token", globalThis.fetch, 0),
+      /request timeout/
     );
   });
 

@@ -1,6 +1,7 @@
 import type { TelegramTransport } from "./index.js";
 
 type FetchImplementation = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+const defaultRequestTimeoutMs = 10_000;
 
 interface TelegramApiResponse {
   readonly ok: boolean;
@@ -18,6 +19,14 @@ export class TelegramRateLimitError extends Error {
   }
 }
 
+/** A Telegram API call exceeded HaulAlert's bounded request window. */
+export class TelegramRequestTimeoutError extends Error {
+  public constructor(readonly timeoutMs: number) {
+    super(`Telegram API request timed out after ${timeoutMs}ms`);
+    this.name = "TelegramRequestTimeoutError";
+  }
+}
+
 /** Reads the Bot API credential without ever embedding it in source code. */
 export function getTelegramBotToken(environment: NodeJS.ProcessEnv = process.env): string {
   const token = environment.TELEGRAM_BOT_TOKEN?.trim();
@@ -32,8 +41,13 @@ export function getTelegramBotToken(environment: NodeJS.ProcessEnv = process.env
 export class TelegramBotApiTransport implements TelegramTransport {
   public constructor(
     private readonly botToken: string,
-    private readonly fetchImplementation: FetchImplementation = globalThis.fetch
-  ) {}
+    private readonly fetchImplementation: FetchImplementation = globalThis.fetch,
+    private readonly requestTimeoutMs: number = defaultRequestTimeoutMs
+  ) {
+    if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 1) {
+      throw new Error("Telegram API request timeout must be a positive integer");
+    }
+  }
 
   public async send(input: Parameters<TelegramTransport["send"]>[0]): Promise<void> {
     const body = {
@@ -85,14 +99,25 @@ export class TelegramBotApiTransport implements TelegramTransport {
   }
 
   private async callTelegram(method: "sendMessage" | "answerCallbackQuery", body: Record<string, unknown>): Promise<void> {
-    const response = await this.fetchImplementation(
-      `https://api.telegram.org/bot${this.botToken}/${method}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body)
-      }
-    );
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), this.requestTimeoutMs);
+    let response: Response;
+    try {
+      response = await this.fetchImplementation(
+        `https://api.telegram.org/bot${this.botToken}/${method}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+          signal: abortController.signal
+        }
+      );
+    } catch (error: unknown) {
+      if (abortController.signal.aborted) throw new TelegramRequestTimeoutError(this.requestTimeoutMs);
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const payload = await readTelegramApiResponse(response);
     if (response.status === 429 && payload?.parameters?.retry_after !== undefined) {

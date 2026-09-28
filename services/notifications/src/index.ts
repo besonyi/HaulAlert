@@ -90,7 +90,8 @@ export function getDeliveryKey(match: AlertMatch): string {
 export {
   getTelegramBotToken,
   TelegramBotApiTransport,
-  TelegramRateLimitError
+  TelegramRateLimitError,
+  TelegramRequestTimeoutError
 } from "./telegram-bot-api-transport.js";
 export {
   InMemoryNotificationDeliveryQueue,
