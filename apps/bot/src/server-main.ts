@@ -155,7 +155,9 @@ function getMiniAppUrl(value: string | undefined): string | undefined {
   } catch {
     throw new Error("TELEGRAM_MINIAPP_URL must be a valid HTTPS URL");
   }
-  if (url.protocol !== "https:") throw new Error("TELEGRAM_MINIAPP_URL must be a valid HTTPS URL");
+  if (url.protocol !== "https:" || url.username !== "" || url.password !== "") {
+    throw new Error("TELEGRAM_MINIAPP_URL must be a valid HTTPS URL without credentials");
+  }
   return url.href;
 }
 

@@ -85,4 +85,13 @@ test("Bot server configuration validates its public HTTP settings", () => {
     }),
     /TELEGRAM_MINIAPP_URL/
   );
+  assert.throws(
+    () => getBotServerConfig({
+      DATABASE_URL: "postgresql://example",
+      TELEGRAM_BOT_TOKEN: "token",
+      TELEGRAM_WEBHOOK_SECRET: "a-secure-webhook-secret",
+      TELEGRAM_MINIAPP_URL: "https://user:password@app.haulalert.example"
+    }),
+    /without credentials/
+  );
 });
