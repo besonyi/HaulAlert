@@ -66,6 +66,10 @@ return to the last known-good application revision while preserving PostgreSQL
 data. Database migrations are forward-only: do not roll back schema by deleting
 records or applying ad-hoc destructive SQL during an incident.
 
+Follow the [PostgreSQL backup and restore procedure](postgres-backup-restore.md)
+for rehearsals and incident recovery. Backup scheduling, retention, and recovery
+ownership must be configured by the production deployment owner before launch.
+
 After a restore or failover exercise, verify that durable delivery claims and
 seen-load boundaries replay idempotently. The expected customer safety
 properties are one notification per load/alert/customer key and no silent loss
