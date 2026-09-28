@@ -47,6 +47,7 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
   const server = createMiniAppApiServer({
     alerts: new PostgresAlertRepository(database),
     dashboard: new PostgresDashboardRepository(database),
+    readiness: { check: async () => { await database.query("SELECT 1", []); } },
     adminDashboard: new PostgresAdminDashboardRepository(database),
     adminSearch: new PostgresAdminSearchRepository(database),
     brokerDirectory: new PostgresBrokerDirectoryRepository(database),

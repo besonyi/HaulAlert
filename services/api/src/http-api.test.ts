@@ -136,6 +136,51 @@ test("Mini App API rejects unsigned callers and malformed requests", async () =>
   }
 });
 
+test("health endpoints are public while readiness verifies the configured dependency", async () => {
+  let readinessChecks = 0;
+  const server = createMiniAppApiServer({
+    alerts: {} as AlertManagementRepository,
+    dashboard: { getForUser: async () => { throw new Error("should not reach dashboard"); } },
+    readiness: { check: async () => { readinessChecks += 1; } },
+    authenticate: () => { throw new Error("health checks must not authenticate a Telegram user"); }
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  try {
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("Expected a TCP server address");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    assert.deepEqual(await (await fetch(`${baseUrl}/healthz`)).json(), { status: "ok" });
+    assert.deepEqual(await (await fetch(`${baseUrl}/readyz`)).json(), { status: "ready" });
+    assert.equal(readinessChecks, 1);
+    assert.equal((await fetch(`${baseUrl}/healthz`, { method: "POST" })).status, 405);
+  } finally {
+    await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
+  }
+});
+
+test("readiness reports unavailable when its dependency check fails", async () => {
+  const server = createMiniAppApiServer({
+    alerts: {} as AlertManagementRepository,
+    dashboard: { getForUser: async () => ({ activeAlertCount: 0, loadsFoundLast24Hours: 0, recentNotifications: [] }) },
+    readiness: { check: async () => { throw new Error("database unavailable"); } },
+    authenticate: () => ({ id: userId, firstName: "Alex" })
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  try {
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("Expected a TCP server address");
+    const response = await fetch(`http://127.0.0.1:${address.port}/readyz`);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { status: "unavailable" });
+  } finally {
+    await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
+  }
+});
+
 test("Stripe webhook bypasses Telegram auth only after its own verifier accepts the raw body", async () => {
   const server = createMiniAppApiServer({
     alerts: {} as AlertManagementRepository,

@@ -17,6 +17,8 @@ const maximumRequestBodyBytes = 1_000_000;
 export interface MiniAppApiDependencies {
   readonly alerts: AlertManagementRepository;
   readonly dashboard: DashboardRepository;
+  /** Verifies dependencies needed to serve customer requests, without authenticating a customer. */
+  readonly readiness?: { check(): Promise<void> };
   readonly adminDashboard?: { getOverview(): Promise<unknown> };
   readonly adminSearch?: { search(query: string): Promise<unknown> };
   readonly brokerDirectory?: { search(query: string): Promise<unknown> };
@@ -64,6 +66,21 @@ interface ApiResult {
 async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiDependencies): Promise<ApiResult> {
   const url = new URL(request.url ?? "/", "http://localhost");
   const pathname = url.pathname;
+  if (pathname === "/healthz") {
+    return request.method === "GET"
+      ? { statusCode: 200, body: { status: "ok" } }
+      : { statusCode: 405, body: { error: "method_not_allowed" } };
+  }
+  if (pathname === "/readyz") {
+    if (request.method !== "GET") return { statusCode: 405, body: { error: "method_not_allowed" } };
+    if (dependencies.readiness === undefined) return { statusCode: 503, body: { status: "unavailable" } };
+    try {
+      await dependencies.readiness.check();
+      return { statusCode: 200, body: { status: "ready" } };
+    } catch {
+      return { statusCode: 503, body: { status: "unavailable" } };
+    }
+  }
   if (!pathname.startsWith("/v1/")) return { statusCode: 404, body: { error: "not_found" } };
 
   if (pathname === "/v1/stripe/webhook" && request.method === "POST") {
