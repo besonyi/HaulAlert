@@ -71,6 +71,10 @@ pnpm --filter @haulalert/browser-runtime-service start:central-dispatch
 
 If Chrome is closed or the page is unavailable, the running worker marks the
 session offline and skips provider calls until a later healthy check succeeds.
+If other worker-cycle failures repeat, its provider-specific circuit breaker
+opens after three failures and pauses calls for 60 seconds before a probe. Tune
+the two `CENTRAL_DISPATCH_CIRCUIT_BREAKER_*` settings only with recorded
+capacity and provider-failure evidence.
 
 To receive Telegram updates, set the same `TELEGRAM_WEBHOOK_SECRET` in Telegram's `setWebhook` request, expose `TELEGRAM_WEBHOOK_PATH` publicly, then run the Bot server:
 

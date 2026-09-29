@@ -28,6 +28,7 @@ of the following persists beyond a transient retry window:
 | API readiness | two consecutive failed checks | Check database availability and the API logs; keep the process out of traffic until `/readyz` recovers. |
 | Bot liveness | two failed checks or five minutes unavailable | Check the Bot process and the public route; do not rotate a webhook secret as an incident shortcut. |
 | Central Dispatch session/tab state | offline or degraded for five minutes | Confirm Chrome is running locally and the manually authenticated Central Dispatch page is still open. |
+| Central Dispatch circuit breaker | opens more than once per 15 minutes | Confirm the safe worker error signal and provider availability; leave the cooldown in place rather than forcing repeated calls. |
 | Browser scan failures | repeated failure for the same provider search | Review the safe scan classification in the Admin dashboard, then validate the provider page manually. |
 | Notification deliveries | any `dead_letter` row | Review the delivery attempt history and the affected customer before retrying or contacting them. |
 
@@ -51,6 +52,8 @@ for protected actions.
 5. For a Central Dispatch outage, restore only the local, already-authenticated
    browser session. The worker marks unavailable sessions offline and resumes
    scans after a later healthy check; it must not persist browser credentials.
+   For repeated worker-cycle failures, let the circuit breaker cool down before
+   the next probe; do not restart it repeatedly to bypass provider protection.
 6. For notification failures, the durable worker retries temporary failures
    with exponential backoff and respects Telegram rate limits. Inspect a
    dead-letter's attempt history rather than sending a manual duplicate.
