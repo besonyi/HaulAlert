@@ -5,6 +5,10 @@ below has evidence recorded by the production owner. This checklist describes
 release criteria; it does not indicate that a production deployment or beta has
 already been approved.
 
+Record the applicable evidence in the access-controlled
+[release evidence template](release-evidence-template.md). Do not copy
+credentials, session data, or customer-private content into that record.
+
 ## Release evidence
 
 - [ ] The intended commit has passed the repository `pnpm check` and a

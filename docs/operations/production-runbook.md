@@ -74,6 +74,9 @@ for rehearsals and incident recovery. Backup scheduling, retention, and recovery
 ownership must be configured by the production deployment owner before launch.
 Use the [go-live checklist](go-live-checklist.md) to record the release evidence
 and the remaining production-owner decisions before expanding a beta.
+Use the access-controlled [release evidence template](release-evidence-template.md)
+to keep the revision, ownership, validation, monitoring, and rollback decision
+in one credential-free record.
 
 After a restore or failover exercise, verify that durable delivery claims and
 seen-load boundaries replay idempotently. The expected customer safety
