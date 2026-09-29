@@ -14,8 +14,9 @@ pnpm load:test
 ```
 
 The default workload creates 3,000 active alert subscriptions, evaluates 300
-new loads, and schedules 2,000 browser tabs. It records candidate evaluation,
-matches, and scheduling duration. It is deliberately bounded and has no
+new loads, schedules 2,000 browser tabs, and sends 3,000 notifications through
+the in-memory delivery boundary. It records candidate evaluation, matches,
+scheduling duration, and notification-delivery duration. It is deliberately bounded and has no
 pass/fail threshold; it catches accidental algorithmic regressions before a
 production-like exercise.
 
@@ -26,6 +27,7 @@ integer overrides:
 HAULALERT_LOAD_TEST_ALERTS=10000 \
 HAULALERT_LOAD_TEST_LOADS=1000 \
 HAULALERT_LOAD_TEST_TABS=5000 \
+HAULALERT_LOAD_TEST_NOTIFICATIONS=10000 \
 pnpm load:test
 ```
 

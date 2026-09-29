@@ -2,10 +2,16 @@ import { performance } from "node:perf_hooks";
 
 import { AlertCandidateIndex } from "../packages/alert-matcher/dist/index.js";
 import { ScanScheduler } from "../packages/browser-runtime-core/dist/scan-scheduler.js";
+import {
+  InMemoryNotificationDeliveryQueue,
+  InMemoryNotificationDeliveryStore,
+  NotificationService
+} from "../services/notifications/dist/index.js";
 
 const alertCount = getPositiveInteger("HAULALERT_LOAD_TEST_ALERTS", 3_000, 100_000);
 const loadCount = getPositiveInteger("HAULALERT_LOAD_TEST_LOADS", 300, 10_000);
 const tabCount = getPositiveInteger("HAULALERT_LOAD_TEST_TABS", 2_000, 100_000);
+const notificationCount = getPositiveInteger("HAULALERT_LOAD_TEST_NOTIFICATIONS", 3_000, 100_000);
 const now = new Date("2026-09-28T12:00:00.000Z");
 
 const index = new AlertCandidateIndex();
@@ -76,15 +82,59 @@ const schedulingStartedAt = performance.now();
 const scheduledCount = scheduler.selectDue(tabs, now, tabCount).length;
 const schedulingMilliseconds = elapsed(schedulingStartedAt);
 
+let notificationSendCount = 0;
+const notificationQueue = new InMemoryNotificationDeliveryQueue(
+  new NotificationService(
+    { send: async () => { notificationSendCount += 1; } },
+    new InMemoryNotificationDeliveryStore()
+  )
+);
+const notificationStartedAt = performance.now();
+for (let indexNumber = 0; indexNumber < notificationCount; indexNumber += 1) {
+  notificationQueue.enqueue({
+    alertId: `alert-${indexNumber}`,
+    userId: `user-${indexNumber}`,
+    telegramChatId: String(1_000_000 + indexNumber),
+    load: {
+      provider: "central-dispatch",
+      providerLoadId: "notification-load",
+      pickup: { city: "Dallas", state: "TX", postalCode: "75201", coordinates: null },
+      delivery: { city: "Miami", state: "FL", postalCode: "33101", coordinates: null },
+      vehicleCount: 2,
+      trailerType: "open",
+      payUsd: 1_500,
+      distanceMiles: 1_300,
+      ratePerMile: 1.15,
+      readyAt: "2026-09-28T12:00:00.000Z",
+      postedAt: "2026-09-28T11:00:00.000Z",
+      sourceUrl: null,
+      broker: null
+    }
+  }, {}, now);
+}
+const notificationOutcomes = await notificationQueue.processDue(now);
+const notificationMilliseconds = elapsed(notificationStartedAt);
+const completedNotifications = notificationOutcomes.filter((outcome) => outcome.status === "completed").length;
+if (
+  notificationQueue.size !== 0 ||
+  notificationSendCount !== notificationCount ||
+  completedNotifications !== notificationCount
+) {
+  throw new Error("Notification smoke workload did not complete every queued delivery");
+}
+
 console.log(JSON.stringify({
-  workload: { alertCount, loadCount, tabCount },
+  workload: { alertCount, loadCount, tabCount, notificationCount },
   results: {
     alertIndexBuildMilliseconds: round(buildMilliseconds),
     matchingMilliseconds: round(matchingMilliseconds),
     candidatesEvaluated: candidateCount,
     matchesFound: matchCount,
     schedulerMilliseconds: round(schedulingMilliseconds),
-    scheduledTabs: scheduledCount
+    scheduledTabs: scheduledCount,
+    notificationMilliseconds: round(notificationMilliseconds),
+    notificationsSent: notificationSendCount,
+    completedNotifications
   }
 }, null, 2));
 

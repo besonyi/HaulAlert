@@ -26,7 +26,7 @@ pnpm install
 pnpm check
 ```
 
-To measure matching and browser-tab scheduling locally before selecting a
+To measure matching, notification delivery, and browser-tab scheduling locally before selecting a
 production capacity target, run the bounded smoke workload:
 
 ```bash
