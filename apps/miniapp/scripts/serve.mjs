@@ -6,6 +6,7 @@ const miniAppPort = readPort(process.env.MINIAPP_PORT, 3002);
 const apiOrigin = process.env.MINIAPP_API_ORIGIN ?? "http://127.0.0.1:3001";
 const staticRoot = resolve("dist");
 const maximumRequestBodyBytes = 1_000_000;
+const apiRequestTimeoutMs = readPositiveInteger(process.env.MINIAPP_API_REQUEST_TIMEOUT_MS, 10_000, "MINIAPP_API_REQUEST_TIMEOUT_MS");
 
 createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://localhost");
@@ -16,8 +17,8 @@ createServer(async (request, response) => {
     }
     await serveStatic(response, url.pathname);
   } catch (error) {
-    response.statusCode = error instanceof RequestBodyTooLargeError ? 413 : 500;
-    response.end(response.statusCode === 413 ? "Request body too large" : "Internal server error");
+    response.statusCode = error instanceof RequestBodyTooLargeError ? 413 : error instanceof ApiRequestTimeoutError ? 504 : 500;
+    response.end(response.statusCode === 413 ? "Request body too large" : response.statusCode === 504 ? "API request timed out" : "Internal server error");
   }
 }).listen(miniAppPort, () => {
   console.info(`HaulAlert Mini App listening on http://127.0.0.1:${miniAppPort}`);
@@ -49,7 +50,7 @@ async function proxyApi(request, response, url) {
     Object.entries(request.headers).filter(([name]) => name !== "host" && name !== "connection")
   );
   const body = request.method === "GET" || request.method === "HEAD" ? undefined : await readBody(request);
-  const upstream = await fetch(target, { method: request.method, headers, body });
+  const upstream = await fetchApi(target, { method: request.method, headers, body });
   response.statusCode = upstream.status;
   for (const name of ["content-type", "cache-control"]) {
     const value = upstream.headers.get(name);
@@ -71,6 +72,20 @@ async function readBody(request) {
 }
 
 class RequestBodyTooLargeError extends Error {}
+class ApiRequestTimeoutError extends Error {}
+
+async function fetchApi(target, init) {
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), apiRequestTimeoutMs);
+  try {
+    return await fetch(target, { ...init, signal: abortController.signal });
+  } catch (error) {
+    if (abortController.signal.aborted) throw new ApiRequestTimeoutError();
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function contentType(filePath) {
   if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
@@ -84,4 +99,11 @@ function readPort(value, fallback) {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("MINIAPP_PORT must be 1 through 65535");
   return port;
+}
+
+function readPositiveInteger(value, fallback, name) {
+  if (value === undefined || value.trim() === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${name} must be a positive integer`);
+  return parsed;
 }
