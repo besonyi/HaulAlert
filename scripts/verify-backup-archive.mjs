@@ -2,18 +2,19 @@ import { statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
-import { missingRequiredBackupTables, requiredBackupTables, sha256File } from "./backup-archive-verifier.mjs";
+import {
+  missingRequiredBackupTables,
+  parseBackupVerificationArguments,
+  requiredBackupTables,
+  sha256File
+} from "./backup-archive-verifier.mjs";
 
 const argumentsList = process.argv.slice(2);
 if (argumentsList.includes("--help") || argumentsList.includes("-h")) {
-  console.log("Usage: pnpm backup:verify -- [--checksum] <custom-format-backup-file>");
+  console.log("Usage: pnpm backup:verify -- [--checksum] [--expected-sha256 <sha256>] <custom-format-backup-file>");
   process.exit(0);
 }
-const includeChecksum = argumentsList[0] === "--checksum";
-const archiveArgument = includeChecksum ? argumentsList[1] : argumentsList[0];
-if (archiveArgument === undefined || argumentsList.length !== (includeChecksum ? 2 : 1)) {
-  throw new Error("Provide exactly one PostgreSQL custom-format backup archive");
-}
+const { archivePath: archiveArgument, expectedSha256, includeChecksum } = parseBackupVerificationArguments(argumentsList);
 
 const archivePath = resolve(archiveArgument);
 let archiveStats;
@@ -40,8 +41,15 @@ if (missingTables.length > 0) {
   throw new Error(`Backup archive is missing required HaulAlert tables: ${missingTables.join(", ")}`);
 }
 
+const archiveSha256 = includeChecksum || expectedSha256 !== undefined
+  ? await sha256File(archivePath)
+  : undefined;
+if (expectedSha256 !== undefined && archiveSha256 !== expectedSha256) {
+  throw new Error("Backup archive checksum does not match the expected SHA-256 value");
+}
+
 console.log(JSON.stringify({
   status: "valid",
   requiredTableCount: requiredBackupTables.length,
-  archiveSha256: includeChecksum ? await sha256File(archivePath) : undefined
+  archiveSha256
 }, null, 2));

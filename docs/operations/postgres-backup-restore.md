@@ -57,6 +57,14 @@ database:
    ```bash
    pnpm backup:verify -- --checksum /secure/path/haulalert.backup
    ```
+
+   When the operations log already contains the archive checksum, provide it to
+   fail the verification if the archive differs. `--checksum` remains optional
+   in this form because the verifier calculates it to compare the value:
+
+   ```bash
+   pnpm backup:verify -- --expected-sha256 <recorded-sha256> /secure/path/haulalert.backup
+   ```
 3. Restore into the empty target using a deployment-scoped database user. Do
    not use `--clean` or target the production database during a rehearsal.
 4. Run the repository's migrations in lexical order through

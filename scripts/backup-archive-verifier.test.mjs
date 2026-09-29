@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { tmpdir } from "node:os";
 
-import { missingRequiredBackupTables, requiredBackupTables, sha256File } from "./backup-archive-verifier.mjs";
+import {
+  missingRequiredBackupTables,
+  parseBackupVerificationArguments,
+  requiredBackupTables,
+  sha256File
+} from "./backup-archive-verifier.mjs";
 
 describe("backup archive verifier", () => {
   it("accepts a listing containing every durable HaulAlert table", () => {
@@ -36,5 +41,29 @@ describe("backup archive verifier", () => {
     } finally {
       await rm(temporaryDirectory, { recursive: true, force: true });
     }
+  });
+
+  it("accepts a checksum expectation in either option order", () => {
+    const checksum = "B97065478543CA27F2E24FFC204F61BF8C6CA9EA37317E7E90D38749477CE652";
+
+    assert.deepEqual(
+      parseBackupVerificationArguments(["--checksum", "--expected-sha256", checksum, "archive.backup"]),
+      { archivePath: "archive.backup", expectedSha256: checksum.toLowerCase(), includeChecksum: true }
+    );
+    assert.deepEqual(
+      parseBackupVerificationArguments(["--expected-sha256", checksum, "archive.backup"]),
+      { archivePath: "archive.backup", expectedSha256: checksum.toLowerCase(), includeChecksum: false }
+    );
+  });
+
+  it("rejects malformed or ambiguous verifier arguments", () => {
+    assert.throws(
+      () => parseBackupVerificationArguments(["--expected-sha256", "not-a-checksum", "archive.backup"]),
+      /64-character hexadecimal/
+    );
+    assert.throws(
+      () => parseBackupVerificationArguments(["first.backup", "second.backup"]),
+      /exactly one/
+    );
   });
 });
