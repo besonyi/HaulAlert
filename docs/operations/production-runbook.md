@@ -18,6 +18,20 @@ Use the API readiness endpoint for a load balancer or deployment readiness
 gate. Use liveness endpoints only to determine whether the process needs a
 restart; a successful liveness response does not prove PostgreSQL is available.
 
+For a release check or external monitor that needs to test all public probes
+without logging response contents, set the two public base URLs in its secret
+manager or monitor configuration and run:
+
+```bash
+HAULALERT_API_BASE_URL=https://api.example.test \
+HAULALERT_BOT_BASE_URL=https://bot.example.test \
+pnpm ops:probes
+```
+
+The command checks API liveness and readiness plus Bot liveness, uses a
+five-second timeout by default, and prints only probe names, outcomes, and
+durations. It accepts only credential-free HTTP(S) URLs.
+
 ## Alert thresholds
 
 Configure the production monitoring system to alert the on-call owner when any

@@ -36,6 +36,7 @@ No expansion may proceed while a required ownership field remains unassigned.
 | API `/healthz` from production path | _not yet recorded_ |
 | API `/readyz` from production path | _not yet recorded_ |
 | Bot `/healthz` from production path | _not yet recorded_ |
+| Credential-free `pnpm ops:probes` result | _not yet recorded_ |
 | Admin dashboard operational signals | _not yet recorded_ |
 | Central Dispatch local session readiness | _not yet recorded_ |
 | End-to-end controlled alert delivery | _not yet recorded_ |
