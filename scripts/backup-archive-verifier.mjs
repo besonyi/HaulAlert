@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+
 export const requiredBackupTables = [
   "users",
   "alerts",
@@ -17,6 +20,13 @@ export const requiredBackupTables = [
 /** Finds durable HaulAlert tables absent from a pg_restore custom-archive listing. */
 export function missingRequiredBackupTables(listing) {
   return requiredBackupTables.filter((table) => !hasTableListing(listing, table));
+}
+
+/** Calculates an archive checksum without retaining the archive contents in memory. */
+export async function sha256File(filePath) {
+  const checksum = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) checksum.update(chunk);
+  return checksum.digest("hex");
 }
 
 function hasTableListing(listing, table) {

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, it } from "node:test";
+import { tmpdir } from "node:os";
 
-import { missingRequiredBackupTables, requiredBackupTables } from "./backup-archive-verifier.mjs";
+import { missingRequiredBackupTables, requiredBackupTables, sha256File } from "./backup-archive-verifier.mjs";
 
 describe("backup archive verifier", () => {
   it("accepts a listing containing every durable HaulAlert table", () => {
@@ -19,5 +22,19 @@ describe("backup archive verifier", () => {
       .join("\n");
 
     assert.deepEqual(missingRequiredBackupTables(listing), ["notification_deliveries"]);
+  });
+
+  it("calculates an archive checksum without keeping the file contents", async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), "haulalert-backup-verifier-"));
+    const archivePath = join(temporaryDirectory, "archive.backup");
+    try {
+      await writeFile(archivePath, "haulalert backup verifier");
+      assert.equal(
+        await sha256File(archivePath),
+        "b97065478543ca27f2e24ffc204f61bf8c6ca9ea37317e7e90d38749477ce652"
+      );
+    } finally {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
   });
 });

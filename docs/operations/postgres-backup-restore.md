@@ -50,7 +50,13 @@ database:
    ```
 
    It confirms the archive contains every durable HaulAlert table required for
-   a recovery rehearsal.
+   a recovery rehearsal. To calculate a SHA-256 checksum for comparison with
+   the operations log, add `--checksum`; this reads the full archive but keeps
+   its contents out of process memory:
+
+   ```bash
+   pnpm backup:verify -- --checksum /secure/path/haulalert.backup
+   ```
 3. Restore into the empty target using a deployment-scoped database user. Do
    not use `--clean` or target the production database during a rehearsal.
 4. Run the repository's migrations in lexical order through

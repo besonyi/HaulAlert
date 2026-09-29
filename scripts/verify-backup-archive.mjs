@@ -2,14 +2,16 @@ import { statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
-import { missingRequiredBackupTables, requiredBackupTables } from "./backup-archive-verifier.mjs";
+import { missingRequiredBackupTables, requiredBackupTables, sha256File } from "./backup-archive-verifier.mjs";
 
-const [archiveArgument] = process.argv.slice(2);
-if (archiveArgument === "--help" || archiveArgument === "-h") {
-  console.log("Usage: pnpm backup:verify -- <custom-format-backup-file>");
+const argumentsList = process.argv.slice(2);
+if (argumentsList.includes("--help") || argumentsList.includes("-h")) {
+  console.log("Usage: pnpm backup:verify -- [--checksum] <custom-format-backup-file>");
   process.exit(0);
 }
-if (archiveArgument === undefined || process.argv.length !== 3) {
+const includeChecksum = argumentsList[0] === "--checksum";
+const archiveArgument = includeChecksum ? argumentsList[1] : argumentsList[0];
+if (archiveArgument === undefined || argumentsList.length !== (includeChecksum ? 2 : 1)) {
   throw new Error("Provide exactly one PostgreSQL custom-format backup archive");
 }
 
@@ -40,5 +42,6 @@ if (missingTables.length > 0) {
 
 console.log(JSON.stringify({
   status: "valid",
-  requiredTableCount: requiredBackupTables.length
+  requiredTableCount: requiredBackupTables.length,
+  archiveSha256: includeChecksum ? await sha256File(archivePath) : undefined
 }, null, 2));
