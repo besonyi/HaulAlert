@@ -51,12 +51,24 @@ test("admin client reads protected beta feedback", async () => {
   let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
   const client = new AdminApiClient("signed-init-data", "/api", async (input, init) => {
     captured = { input, ...(init === undefined ? {} : { init }) };
-    return new Response(JSON.stringify({ feedback: [{ id: "feedback-1", message: "Helpful", userId: "user-1", createdAt: "2026-09-29T00:00:00.000Z" }] }));
+    return new Response(JSON.stringify({ feedback: [{ id: "feedback-1", message: "Helpful", userId: "user-1", createdAt: "2026-09-29T00:00:00.000Z", reviewedAt: null }] }));
   });
   const feedback = await client.getBetaFeedback();
   assert.equal(captured?.input, "/api/v1/admin/beta-feedback");
   assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
   assert.equal(feedback[0]?.message, "Helpful");
+});
+
+test("admin client marks beta feedback reviewed with Telegram authorization", async () => {
+  let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
+  const client = new AdminApiClient("signed-init-data", "/api", async (input, init) => {
+    captured = { input, ...(init === undefined ? {} : { init }) };
+    return new Response(JSON.stringify({ feedback: { id: "feedback-1" } }));
+  });
+  await client.markBetaFeedbackReviewed("feedback-1");
+  assert.equal(captured?.input, "/api/v1/admin/beta-feedback/feedback-1/review");
+  assert.equal(captured?.init?.method, "POST");
+  assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
 });
 
 test("admin client reads its role and sends a protected partner approval", async () => {

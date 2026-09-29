@@ -32,6 +32,22 @@ test("admin audit rejects malformed operator identities", async () => {
   );
 });
 
+test("admin audit accepts a beta feedback review action", async () => {
+  let parameters: readonly unknown[] | undefined;
+  const repository = new PostgresAdminAuditRepository({
+    query: async (_sql, values) => {
+      parameters = values;
+      return { rows: [] };
+    }
+  });
+  await repository.record({
+    actorTelegramUserId: "12345",
+    action: "beta_feedback_reviewed",
+    subjectUserId: "11111111-1111-4111-8111-111111111111"
+  });
+  assert.deepEqual(parameters, ["12345", "beta_feedback_reviewed", "11111111-1111-4111-8111-111111111111"]);
+});
+
 test("admin audit returns a bounded newest-first operator trail", async () => {
   let parameters: readonly unknown[] | undefined;
   const repository = new PostgresAdminAuditRepository({

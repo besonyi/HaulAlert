@@ -2,7 +2,7 @@ import type { SqlExecutor } from "@haulalert/notification-service";
 
 export interface AdminAuditEventInput {
   readonly actorTelegramUserId: string;
-  readonly action: "partner_approval_requested";
+  readonly action: "partner_approval_requested" | "beta_feedback_reviewed";
   readonly subjectUserId: string;
 }
 
@@ -40,7 +40,7 @@ export class PostgresAdminAuditRepository {
 
 function event(row: Record<string, unknown>): AdminAuditEvent {
   const action = row.action;
-  if (action !== "partner_approval_requested") throw new Error("Unexpected audit action");
+  if (action !== "partner_approval_requested" && action !== "beta_feedback_reviewed") throw new Error("Unexpected audit action");
   return {
     id: uuid(row.id, "audit event ID"),
     actorTelegramUserId: telegramId(row.actor_telegram_user_id),

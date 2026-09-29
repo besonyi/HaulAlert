@@ -31,7 +31,7 @@ export interface AdminSearchResults {
 export interface AdminAuditEvent {
   readonly id: string;
   readonly actorTelegramUserId: string;
-  readonly action: "partner_approval_requested";
+  readonly action: "partner_approval_requested" | "beta_feedback_reviewed";
   readonly subjectUserId: string;
   readonly createdAt: string;
 }
@@ -41,6 +41,7 @@ export interface AdminBetaFeedback {
   readonly userId: string;
   readonly message: string;
   readonly createdAt: string;
+  readonly reviewedAt: string | null;
 }
 
 export type AdminRole = "viewer" | "operator";
@@ -88,6 +89,14 @@ export class AdminApiClient {
     });
     if (!response.ok) throw await errorFrom(response);
     return (await response.json() as { feedback: AdminBetaFeedback[] }).feedback;
+  }
+
+  public async markBetaFeedbackReviewed(feedbackId: string): Promise<void> {
+    const response = await this.request(`${this.baseUrl}/v1/admin/beta-feedback/${encodeURIComponent(feedbackId)}/review`, {
+      method: "POST",
+      headers: { authorization: `tma ${this.initData}` }
+    });
+    if (!response.ok) throw await errorFrom(response);
   }
 
   public async getAccess(): Promise<AdminRole> {

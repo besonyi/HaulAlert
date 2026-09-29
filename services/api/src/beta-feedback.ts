@@ -13,6 +13,7 @@ export interface BetaFeedback {
 export interface BetaFeedbackReviewItem extends BetaFeedback {
   readonly userId: string;
   readonly message: string;
+  readonly reviewedAt: string | null;
 }
 
 /** Signals a customer-correctable feedback payload without exposing it in an API error. */
@@ -41,13 +42,26 @@ export class PostgresBetaFeedbackRepository {
   public async getRecent(limit: number = 20): Promise<readonly BetaFeedbackReviewItem[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Beta feedback limit must be an integer between 1 and 100");
     const result = await this.database.query(
-      `SELECT id, user_id, message, created_at
+      `SELECT id, user_id, message, created_at, reviewed_at
       FROM beta_feedback
       ORDER BY created_at DESC, id DESC
       LIMIT $1`,
       [limit]
     );
     return result.rows.map(reviewItem);
+  }
+
+  /** Marks an open item reviewed exactly once for the protected operator workflow. */
+  public async markReviewed(feedbackId: string): Promise<BetaFeedbackReviewItem | undefined> {
+    const result = await this.database.query(
+      `UPDATE beta_feedback
+      SET reviewed_at = now()
+      WHERE id = $1::uuid AND reviewed_at IS NULL
+      RETURNING id, user_id, message, created_at, reviewed_at`,
+      [uuid(feedbackId)]
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : reviewItem(row);
   }
 }
 
@@ -78,5 +92,11 @@ function timestamp(value: unknown): string {
 function reviewItem(row: Record<string, unknown>): BetaFeedbackReviewItem {
   const message = typeof row.message === "string" ? row.message : "";
   if (message.length < 1 || message.length > 1200) throw new Error("Expected beta feedback message");
-  return { id: uuid(row.id), userId: uuid(row.user_id), message, createdAt: timestamp(row.created_at) };
+  return {
+    id: uuid(row.id),
+    userId: uuid(row.user_id),
+    message,
+    createdAt: timestamp(row.created_at),
+    reviewedAt: row.reviewed_at === null || row.reviewed_at === undefined ? null : timestamp(row.reviewed_at)
+  };
 }

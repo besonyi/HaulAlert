@@ -70,11 +70,14 @@ function renderOverview(overview: AdminSystemOverview): void {
   root.querySelectorAll<HTMLButtonElement>("[data-approve-partner]").forEach((button) => {
     button.addEventListener("click", () => { void approvePartner(button.dataset.approvePartner); });
   });
+  root.querySelectorAll<HTMLButtonElement>("[data-review-feedback]").forEach((button) => {
+    button.addEventListener("click", () => { void reviewFeedback(button.dataset.reviewFeedback); });
+  });
 }
 
 function feedbackMarkup(items: readonly AdminBetaFeedback[]): string {
   if (items.length === 0) return `<section class="feedback"><h2>Beta feedback</h2><p>No beta feedback recorded yet.</p></section>`;
-  return `<section class="feedback"><h2>Beta feedback</h2><p>Customer text is visible only to allowlisted Admin users.</p><div class="feedback-list">${items.map((item) => `<article><strong>${escapeHtml(shortId(item.userId))}</strong><p>${escapeHtml(item.message)}</p><span>${escapeHtml(formatTime(item.createdAt))}</span></article>`).join("")}</div></section>`;
+  return `<section class="feedback"><h2>Beta feedback</h2><p>Customer text is visible only to allowlisted Admin users. Operators can mark open items reviewed; this does not contact the customer.</p><div class="feedback-list">${items.map((item) => `<article><strong>${escapeHtml(shortId(item.userId))}</strong><p>${escapeHtml(item.message)}</p><span>${escapeHtml(formatTime(item.createdAt))}</span><div class="feedback-actions">${item.reviewedAt === null ? `${adminRole === "operator" ? `<button type="button" data-review-feedback="${escapeHtml(item.id)}">Mark reviewed</button>` : ""}<em>Open</em>` : `<em class="reviewed">Reviewed ${escapeHtml(formatTime(item.reviewedAt))}</em>`}</div></article>`).join("")}</div></section>`;
 }
 
 function auditMarkup(events: readonly AdminAuditEvent[]): string {
@@ -168,6 +171,20 @@ async function approvePartner(userId: string | undefined): Promise<void> {
     searchMessage = error instanceof AdminApiError && error.statusCode === 409
       ? "This partner is no longer awaiting approval."
       : "Partner approval could not be completed. Try again shortly.";
+  }
+  renderOverview(currentOverview);
+}
+
+async function reviewFeedback(feedbackId: string | undefined): Promise<void> {
+  if (client === undefined || currentOverview === undefined || feedbackId === undefined || adminRole !== "operator") return;
+  try {
+    await client.markBetaFeedbackReviewed(feedbackId);
+    [betaFeedback, auditEvents] = await Promise.all([client.getBetaFeedback(), client.getAuditEvents()]);
+    searchMessage = "Feedback marked reviewed and recorded in the audit trail.";
+  } catch (error: unknown) {
+    searchMessage = error instanceof AdminApiError && error.statusCode === 409
+      ? "This feedback item has already been reviewed."
+      : "Feedback review could not be completed. Try again shortly.";
   }
   renderOverview(currentOverview);
 }

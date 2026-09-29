@@ -21,6 +21,7 @@ export interface MiniAppApiDependencies {
   readonly feedback?: {
     create(input: { readonly userId: string; readonly message: unknown }): Promise<unknown>;
     getRecent?(limit?: number): Promise<unknown>;
+    markReviewed?(feedbackId: string): Promise<unknown | undefined>;
   };
   /** Verifies dependencies needed to serve customer requests, without authenticating a customer. */
   readonly readiness?: { check(): Promise<void> };
@@ -39,7 +40,7 @@ export interface MiniAppApiDependencies {
     approve(userId: string): Promise<unknown | undefined>;
   };
   readonly audit?: {
-    record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested"; readonly subjectUserId: string }): Promise<void>;
+    record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested" | "beta_feedback_reviewed"; readonly subjectUserId: string }): Promise<void>;
     getRecent?(): Promise<unknown>;
   };
   readonly billing?: {
@@ -138,6 +139,20 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       return roleFor(dependencies, user) !== undefined
         ? { statusCode: 200, body: { feedback: await dependencies.feedback.getRecent() } }
         : { statusCode: 403, body: { error: "forbidden" } };
+    }
+    const feedbackReviewRoute = parseAdminFeedbackReviewRoute(pathname);
+    if (feedbackReviewRoute !== undefined && request.method === "POST") {
+      if (dependencies.feedback?.markReviewed === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
+      if (roleFor(dependencies, user) !== "operator") return { statusCode: 403, body: { error: "forbidden" } };
+      if (!isUuid(feedbackReviewRoute.feedbackId)) return { statusCode: 400, body: { error: "invalid_feedback_id" } };
+      const feedback = await dependencies.feedback.markReviewed(feedbackReviewRoute.feedbackId);
+      if (feedback === undefined) return { statusCode: 409, body: { error: "feedback_not_open" } };
+      await dependencies.audit?.record({
+        actorTelegramUserId: user.telegramUserId ?? user.id,
+        action: "beta_feedback_reviewed",
+        subjectUserId: feedbackReviewRoute.feedbackId
+      });
+      return { statusCode: 200, body: { feedback } };
     }
     if (pathname === "/v1/admin/access" && request.method === "GET") {
       if (!hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
@@ -288,6 +303,13 @@ function parseAdminPartnerRoute(pathname: string): { readonly userId: string } |
   const segments = pathname.split("/").filter((segment) => segment.length > 0);
   return segments[0] === "v1" && segments[1] === "admin" && segments[2] === "partners" && segments[4] === "approve" && segments.length === 5 && segments[3] !== undefined
     ? { userId: segments[3] }
+    : undefined;
+}
+
+function parseAdminFeedbackReviewRoute(pathname: string): { readonly feedbackId: string } | undefined {
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+  return segments[0] === "v1" && segments[1] === "admin" && segments[2] === "beta-feedback" && segments[4] === "review" && segments.length === 5 && segments[3] !== undefined
+    ? { feedbackId: segments[3] }
     : undefined;
 }
 

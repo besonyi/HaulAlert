@@ -17,6 +17,7 @@ psql "$DATABASE_URL" -f infra/database/migrations/0009_partner_eligibility.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0010_stripe_webhook_events.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0011_admin_audit_log.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0012_beta_feedback.sql
+psql "$DATABASE_URL" -f infra/database/migrations/0013_beta_feedback_review.sql
 ```
 
 The application must use four transactional patterns:
