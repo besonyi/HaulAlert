@@ -16,7 +16,7 @@ export class CentralDispatchHealthReporter {
       if (health.status === "healthy") {
         this.log("Central Dispatch browser session is healthy.");
       } else {
-        this.log(`Central Dispatch browser session is offline: ${health.error?.message ?? "page unavailable"}`);
+        this.log("Central Dispatch browser session is offline; inspect local Chrome availability and worker configuration.");
       }
     }
     this.reportOverflowRisk(result);

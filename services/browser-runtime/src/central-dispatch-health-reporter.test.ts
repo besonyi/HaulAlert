@@ -19,7 +19,7 @@ function result(
         createdAt: "2026-09-24T12:00:00.000Z",
         lastHeartbeatAt: null
       },
-      ...(status === "offline" ? { error: new Error("Chrome unavailable") } : {})
+      ...(status === "offline" ? { error: new Error("Chrome unavailable at https://user:secret@centraldispatch.example") } : {})
     },
     outcomes: hasScanOutcome ? [{
       status: "processed",
@@ -51,9 +51,10 @@ describe("Central Dispatch health reporter", () => {
     reporter.report(result("healthy", false, true));
 
     assert.deepEqual(messages, [
-      "Central Dispatch browser session is offline: Chrome unavailable",
+      "Central Dispatch browser session is offline; inspect local Chrome availability and worker configuration.",
       "Central Dispatch browser session is healthy."
     ]);
+    assert.doesNotMatch(messages[0] ?? "", /secret|centraldispatch\.example/i);
   });
 
   it("reports a capacity-risk bucket once while accelerated polling is active", () => {

@@ -127,7 +127,7 @@ export async function runCentralDispatchWorker(
         healthReporter.report(result);
         tabReporter.report();
       },
-      onCycleError: (error) => console.error(`Central Dispatch worker cycle failed: ${error.message}`)
+      onCycleError: () => console.error("Central Dispatch worker cycle failed; cycle will retry.")
     }).run();
   } finally {
     await pool.end();
@@ -153,9 +153,8 @@ function isMainModule(): boolean {
 }
 
 if (isMainModule()) {
-  void runCentralDispatchWorker().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : "Central Dispatch worker failed to start";
-    console.error(`Central Dispatch worker failed to start: ${message}`);
+  void runCentralDispatchWorker().catch(() => {
+    console.error("Central Dispatch worker failed to start; inspect configuration and database connectivity.");
     process.exitCode = 1;
   });
 }
