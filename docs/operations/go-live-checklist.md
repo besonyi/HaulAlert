@@ -48,6 +48,9 @@ already been approved.
 - [ ] A controlled beta cohort and its support contact path are defined.
 - [ ] A test alert has been created, matched against a controlled load, and
   delivered once to the correct Telegram chat without a duplicate delivery.
+- [ ] A capacity exercise has been recorded following the
+  [capacity-validation procedure](capacity-validation.md), with results compared
+  against the agreed customer-growth and latency targets.
 - [ ] The Admin dashboard shows the expected browser session, scan, delivery,
   and recovery signals for the test path.
 - [ ] Monitoring implements the thresholds in the
