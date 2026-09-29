@@ -19,6 +19,7 @@ export { InactiveSubscriptionError, PlanLimitExceededError, PostgresEntitlementR
 export { PostgresReferralRepository, type ReferralSummary } from "./referrals.js";
 export { PostgresPartnerAccountRepository, type PartnerAccount, type PartnerRewardMode, type PartnerStatus } from "./partner-accounts.js";
 export { PostgresPartnerEarningsRepository, type PartnerEarningsSummary } from "./partner-earnings.js";
+export { PostgresPartnerCommissionReleaseRepository } from "./partner-commission-release.js";
 export {
   PostgresSubscriptionCheckoutService,
   PostgresSubscriptionPortalService,

@@ -42,6 +42,17 @@ on `127.0.0.1:3010` by default (`CENTRAL_DISPATCH_HEALTH_PORT` changes only the
 local port). A local monitoring agent may check those endpoints; do not expose
 this port publicly or proxy it through the Mini App API.
 
+## Partner commission release
+
+Run `pnpm --filter @haulalert/api-service commissions:start` as a separate
+database-only worker wherever production jobs run. It releases only commissions
+whose configured hold period has elapsed; it does not access wallets, initiate
+cash-outs, or call a payout provider. The worker starts with an immediate
+idempotent pass and then repeats hourly by default. Set
+`PARTNER_COMMISSION_WORKER_BATCH_SIZE` and
+`PARTNER_COMMISSION_WORKER_POLL_INTERVAL_MS` only in deployment runtime
+configuration, never in the repository.
+
 ## Alert thresholds
 
 Configure the production monitoring system to alert the on-call owner when any

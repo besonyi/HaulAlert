@@ -14,7 +14,8 @@
     "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "node --test dist/*.test.js",
-    "start": "node dist/server-main.js"
+    "start": "node dist/server-main.js",
+    "commissions:start": "node dist/partner-commission-worker-main.js"
   },
   "dependencies": {
     "@haulalert/canonical-filter": "workspace:*",
