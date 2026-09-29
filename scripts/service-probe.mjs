@@ -10,16 +10,30 @@ export function getServiceProbeConfig(environment = process.env) {
   return {
     apiBaseUrl: publicBaseUrl(environment.HAULALERT_API_BASE_URL, "HAULALERT_API_BASE_URL"),
     botBaseUrl: publicBaseUrl(environment.HAULALERT_BOT_BASE_URL, "HAULALERT_BOT_BASE_URL"),
+    centralDispatchBaseUrl: optionalLoopbackBaseUrl(
+      environment.HAULALERT_CENTRAL_DISPATCH_HEALTH_BASE_URL,
+      "HAULALERT_CENTRAL_DISPATCH_HEALTH_BASE_URL"
+    ),
     timeoutMilliseconds: timeoutMilliseconds(environment.HAULALERT_PROBE_TIMEOUT_MS)
   };
 }
 
 /** Probes public API and Bot liveness/readiness endpoints without emitting endpoint or response contents. */
-export async function probeServices({ apiBaseUrl, botBaseUrl, timeoutMilliseconds = defaultTimeoutMilliseconds, fetchImpl = fetch }) {
+export async function probeServices({
+  apiBaseUrl,
+  botBaseUrl,
+  centralDispatchBaseUrl,
+  timeoutMilliseconds = defaultTimeoutMilliseconds,
+  fetchImpl = fetch
+}) {
   const probes = [
     { name: "api_liveness", url: endpoint(apiBaseUrl, "/healthz"), expectedStatus: "ok" },
     { name: "api_readiness", url: endpoint(apiBaseUrl, "/readyz"), expectedStatus: "ready" },
-    { name: "bot_liveness", url: endpoint(botBaseUrl, "/healthz"), expectedStatus: "ok" }
+    { name: "bot_liveness", url: endpoint(botBaseUrl, "/healthz"), expectedStatus: "ok" },
+    ...(centralDispatchBaseUrl === undefined ? [] : [
+      { name: "central_dispatch_liveness", url: endpoint(centralDispatchBaseUrl, "/healthz"), expectedStatus: "ok" },
+      { name: "central_dispatch_readiness", url: endpoint(centralDispatchBaseUrl, "/readyz"), expectedStatus: "ready" }
+    ])
   ];
   return Promise.all(probes.map((probe) => runProbe(probe, timeoutMilliseconds, fetchImpl)));
 }
@@ -55,6 +69,16 @@ function publicBaseUrl(value, name) {
   return url.href;
 }
 
+function optionalLoopbackBaseUrl(value, name) {
+  if (value === undefined || value.trim().length === 0) return undefined;
+  const baseUrl = publicBaseUrl(value, name);
+  const url = new URL(baseUrl);
+  if (url.protocol !== "http:" || url.hostname !== "127.0.0.1") {
+    throw new Error(`${name} must use credential-free http://127.0.0.1`);
+  }
+  return url.href;
+}
+
 function timeoutMilliseconds(value) {
   if (value === undefined || value.trim().length === 0) return defaultTimeoutMilliseconds;
   const timeout = Number(value);
@@ -79,7 +103,7 @@ function isMainModule() {
 
 if (isMainModule()) {
   if (process.argv.includes("--help") || process.argv.includes("-h")) {
-    console.log("Usage: HAULALERT_API_BASE_URL=<url> HAULALERT_BOT_BASE_URL=<url> pnpm ops:probes");
+    console.log("Usage: HAULALERT_API_BASE_URL=<url> HAULALERT_BOT_BASE_URL=<url> [HAULALERT_CENTRAL_DISPATCH_HEALTH_BASE_URL=http://127.0.0.1:<port>] pnpm ops:probes");
   } else {
     probeServices(getServiceProbeConfig())
       .then((probes) => console.log(JSON.stringify({ status: "ok", probes }, null, 2)))

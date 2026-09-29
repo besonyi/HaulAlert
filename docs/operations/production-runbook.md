@@ -32,6 +32,11 @@ The command checks API liveness and readiness plus Bot liveness, uses a
 five-second timeout by default, and prints only probe names, outcomes, and
 durations. It accepts only credential-free HTTP(S) URLs.
 
+When the command runs on the Central Dispatch runtime host, optionally set
+`HAULALERT_CENTRAL_DISPATCH_HEALTH_BASE_URL=http://127.0.0.1:3010` to include
+its local `/healthz` and `/readyz` checks. The command rejects any non-loopback
+or credentialed Central Dispatch health URL.
+
 The Central Dispatch worker also exposes loopback-only liveness and readiness
 on `127.0.0.1:3010` by default (`CENTRAL_DISPATCH_HEALTH_PORT` changes only the
 local port). A local monitoring agent may check those endpoints; do not expose
