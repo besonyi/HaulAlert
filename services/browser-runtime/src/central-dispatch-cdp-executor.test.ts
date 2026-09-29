@@ -57,6 +57,8 @@ describe("Central Dispatch CDP request executor", () => {
     assert.match(expression, /credentials: 'include'/);
     assert.match(expression, /listing-search\/api\/open-search/);
     assert.match(expression, /AbortController/);
+    assert.match(expression, /text\.length > 2097152/);
+    assert.match(expression, /Central Dispatch response exceeded 2 MiB/);
     assert.doesNotMatch(expression, /cookie/i);
   });
 

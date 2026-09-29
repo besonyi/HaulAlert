@@ -6,6 +6,7 @@ import { CentralDispatchSessionClient } from "./central-dispatch-session-client.
 
 const centralDispatchHost = "app.centraldispatch.com";
 const defaultRequestTimeoutMs = 15_000;
+const maxProviderResponseCharacters = 2 * 1024 * 1024;
 
 export interface ChromeDevToolsTarget {
   readonly id: string;
@@ -155,6 +156,7 @@ function toFetchExpression(request: CentralDispatchOpenSearchRequest, requestTim
     "}).then(async (response) => {",
     "const text = await response.text();",
     "if (!response.ok) throw new Error(`Central Dispatch returned HTTP ${response.status}`);",
+    "if (text.length > ", String(maxProviderResponseCharacters), ") throw new Error('Central Dispatch response exceeded 2 MiB');",
     "JSON.parse(text);",
     "return text;",
     "}).finally(() => clearTimeout(timeout)); })()"
