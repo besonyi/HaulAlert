@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { getAdminAccessConfig, getAdminRole, PostgresAdminAuditRepository, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresSubscriptionPortalService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type AdminAccessConfig, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
+import { getAdminAccessConfig, getAdminRole, PostgresAdminAuditRepository, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBetaFeedbackRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresSubscriptionPortalService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type AdminAccessConfig, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
@@ -47,6 +47,7 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
   const server = createMiniAppApiServer({
     alerts: new PostgresAlertRepository(database),
     dashboard: new PostgresDashboardRepository(database),
+    feedback: new PostgresBetaFeedbackRepository(database),
     readiness: { check: async () => { await database.query("SELECT 1", []); } },
     adminDashboard: new PostgresAdminDashboardRepository(database),
     adminSearch: new PostgresAdminSearchRepository(database),

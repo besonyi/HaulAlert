@@ -18,6 +18,7 @@ const maximumRequestBodyBytes = 1_000_000;
 export interface MiniAppApiDependencies {
   readonly alerts: AlertManagementRepository;
   readonly dashboard: DashboardRepository;
+  readonly feedback?: { create(input: { readonly userId: string; readonly message: unknown }): Promise<unknown> };
   /** Verifies dependencies needed to serve customer requests, without authenticating a customer. */
   readonly readiness?: { check(): Promise<void> };
   readonly adminDashboard?: { getOverview(): Promise<unknown> };
@@ -174,6 +175,11 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
     }
     if (pathname === "/v1/dashboard" && request.method === "GET") {
       return { statusCode: 200, body: { dashboard: await dependencies.dashboard.getForUser(user.id) } };
+    }
+    if (pathname === "/v1/beta-feedback" && request.method === "POST") {
+      if (dependencies.feedback === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      const body = await parseBody(request);
+      return { statusCode: 201, body: { feedback: await dependencies.feedback.create({ userId: user.id, message: body.message }) } };
     }
     if (pathname === "/v1/alerts" && request.method === "GET") {
       return { statusCode: 200, body: { alerts: await dependencies.alerts.listForUser(user.id) } };

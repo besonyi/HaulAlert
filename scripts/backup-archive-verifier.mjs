@@ -14,7 +14,8 @@ export const requiredBackupTables = [
   "referrals",
   "partner_accounts",
   "stripe_webhook_events",
-  "admin_audit_events"
+  "admin_audit_events",
+  "beta_feedback"
 ];
 
 /** Finds durable HaulAlert tables absent from a pg_restore custom-archive listing. */

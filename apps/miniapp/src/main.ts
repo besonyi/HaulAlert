@@ -47,6 +47,7 @@ let editingAlert: MiniAppAlert | undefined;
 let blockedBrokerIds: readonly string[] = [];
 let brokerResults: readonly MiniAppBrokerProfile[] = [];
 let brokerSearchMessage = "";
+let feedbackStatus = "";
 let refreshing = false;
 let message = telegram?.initData ? "" : "Open HaulAlert from Telegram to manage alerts.";
 const client = telegram?.initData ? new MiniAppApiClient(telegram.initData) : undefined;
@@ -96,7 +97,12 @@ function dashboardMarkup(): string {
     ${recentNotificationsMarkup()}
     ${planMarkup()}
     ${referralMarkup()}
+    ${feedbackMarkup()}
   </section>`;
+}
+
+function feedbackMarkup(): string {
+  return `<section class="feedback"><h2>Help improve HaulAlert</h2><p>Share a short beta note. Please do not include account details, credentials, or sensitive load information.</p><form data-feedback><textarea name="message" minlength="1" maxlength="1200" placeholder="What should we improve?" required></textarea><button class="secondary" type="submit">Send feedback</button></form>${feedbackStatus ? `<p class="feedback-status" role="status">${escapeHtml(feedbackStatus)}</p>` : ""}</section>`;
 }
 
 function activityMarkup(): string {
@@ -289,7 +295,27 @@ function bindInteractions(): void {
   app.querySelector<HTMLButtonElement>("[data-upgrade-essential]")?.addEventListener("click", () => { void upgradeToEssential(); });
   app.querySelector<HTMLButtonElement>("[data-share-referral]")?.addEventListener("click", () => { void shareReferralLink(); });
   app.querySelector<HTMLButtonElement>("[data-copy-referral]")?.addEventListener("click", () => { void copyReferralLink(); });
+  app.querySelector<HTMLFormElement>("[data-feedback]")?.addEventListener("submit", (event) => { void submitFeedback(event); });
   app.querySelector<HTMLButtonElement>("[data-refresh]")?.addEventListener("click", () => { void refresh(); });
+}
+
+async function submitFeedback(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (client === undefined || !(form instanceof HTMLFormElement)) return;
+  const messageValue = String(new FormData(form).get("message") ?? "").trim();
+  if (messageValue.length < 1 || messageValue.length > 1200) {
+    feedbackStatus = "Use between 1 and 1,200 characters.";
+    render();
+    return;
+  }
+  try {
+    await client.submitBetaFeedback(messageValue);
+    feedbackStatus = "Thanks — your beta feedback was recorded.";
+  } catch (error: unknown) {
+    feedbackStatus = readableError(error);
+  }
+  render();
 }
 
 function updateProviderSummary(): void {

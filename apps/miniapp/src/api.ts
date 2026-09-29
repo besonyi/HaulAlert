@@ -116,6 +116,10 @@ export class MiniAppApiClient {
     return (await response.json() as { referral: MiniAppReferralSummary }).referral;
   }
 
+  public async submitBetaFeedback(message: string): Promise<void> {
+    await this.send("/v1/beta-feedback", "POST", { message });
+  }
+
   public async createAlert(filter: CanonicalFilter): Promise<MiniAppAlert> {
     const response = await this.send("/v1/alerts", "POST", { filter });
     return (await response.json() as { alert: MiniAppAlert }).alert;

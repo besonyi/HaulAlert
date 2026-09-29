@@ -283,3 +283,32 @@ test("admin viewers can read operations but cannot approve partners", async () =
     await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
   }
 });
+
+test("authenticated customers can submit bounded beta feedback", async () => {
+  const received: Array<{ readonly userId: string; readonly message: unknown }> = [];
+  const server = createMiniAppApiServer({
+    alerts: {} as AlertManagementRepository,
+    dashboard: { getForUser: async () => ({ activeAlertCount: 0, loadsFoundLast24Hours: 0, recentNotifications: [] }) },
+    feedback: { create: async (input) => {
+      received.push(input);
+      return { id: "11111111-1111-4111-8111-111111111111" };
+    } },
+    authenticate: () => ({ id: userId, firstName: "Alex" })
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("Expected a TCP server address");
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/beta-feedback`, {
+      method: "POST",
+      headers: { authorization: "tma verified", "content-type": "application/json" },
+      body: JSON.stringify({ message: "More pickup filters" })
+    });
+    assert.equal(response.status, 201);
+    assert.deepEqual(received, [{ userId, message: "More pickup filters" }]);
+    assert.equal((await fetch(`http://127.0.0.1:${address.port}/v1/beta-feedback`, { method: "POST", headers: { authorization: "tma verified" }, body: "[]" })).status, 400);
+  } finally {
+    await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
+  }
+});
