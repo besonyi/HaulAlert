@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { CentralDispatchOpenSearchRequest } from "@haulalert/adapter-central-dispatch";
 import { createSourceFilterHash } from "@haulalert/filter-compiler";
 
 import {
@@ -89,6 +90,27 @@ describe("Central Dispatch CDP request executor", () => {
       }),
       (error: unknown) => error instanceof CentralDispatchRequestTimeoutError && error.timeoutMs === 1
     );
+  });
+
+  it("refuses an unapproved destination before it reaches the authenticated page", async () => {
+    let targetLookups = 0;
+    const executor = new CentralDispatchCdpRequestExecutor({
+      findCentralDispatchTarget: async () => {
+        targetLookups += 1;
+        return target;
+      },
+      evaluateJson: async () => ({})
+    });
+    const request = {
+      method: "POST",
+      url: "https://example.invalid/internal"
+    } as unknown as CentralDispatchOpenSearchRequest;
+
+    await assert.rejects(
+      () => executor.execute(request),
+      /Central Dispatch browser request must use the approved Open Search endpoint/
+    );
+    assert.equal(targetLookups, 0);
   });
 
   it("rejects non-local or credentialed debugger sockets", () => {

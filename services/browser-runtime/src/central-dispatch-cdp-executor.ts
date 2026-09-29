@@ -1,4 +1,7 @@
-import type { CentralDispatchOpenSearchRequest } from "@haulalert/adapter-central-dispatch";
+import {
+  centralDispatchOpenSearchUrl,
+  type CentralDispatchOpenSearchRequest
+} from "@haulalert/adapter-central-dispatch";
 
 import type { AuthenticatedCentralDispatchRequestExecutor } from "./central-dispatch-open-search-transport.js";
 import { CentralDispatchOpenSearchTransport } from "./central-dispatch-open-search-transport.js";
@@ -50,8 +53,16 @@ export class CentralDispatchCdpRequestExecutor implements AuthenticatedCentralDi
   }
 
   public async execute(request: CentralDispatchOpenSearchRequest): Promise<unknown> {
+    assertCentralDispatchOpenSearchRequest(request);
     const target = await withTimeout(this.runtime.findCentralDispatchTarget(), this.requestTimeoutMs);
     return withTimeout(this.runtime.evaluateJson(target, toFetchExpression(request, this.requestTimeoutMs)), this.requestTimeoutMs);
+  }
+}
+
+/** Keeps authenticated browser requests constrained to the verified provider endpoint. */
+function assertCentralDispatchOpenSearchRequest(request: CentralDispatchOpenSearchRequest): void {
+  if (request.method !== "POST" || request.url !== centralDispatchOpenSearchUrl) {
+    throw new Error("Central Dispatch browser request must use the approved Open Search endpoint");
   }
 }
 
