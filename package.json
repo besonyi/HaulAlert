@@ -12,9 +12,10 @@
     "build": "pnpm --recursive --if-present run build",
     "lint": "pnpm --recursive --if-present run lint",
     "typecheck": "pnpm --recursive --if-present run typecheck",
-    "test": "pnpm run build && pnpm --recursive --if-present run test",
+    "test": "pnpm run build && pnpm --recursive --if-present run test && node --test scripts/backup-archive-verifier.test.mjs",
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test",
-    "load:test": "pnpm run build && node scripts/load-test.mjs"
+    "load:test": "pnpm run build && node scripts/load-test.mjs",
+    "backup:verify": "node scripts/verify-backup-archive.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.7.2",

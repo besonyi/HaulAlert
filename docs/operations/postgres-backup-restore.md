@@ -40,8 +40,17 @@ database:
 
 1. Create a fresh target database and apply the same PostgreSQL extensions the
    application requires, including `pgcrypto`.
-2. Verify the backup archive with `pg_restore --list`; compare its checksum to
-   the operations record before restoring.
+2. Verify the backup archive with `pg_restore --list` and the repository check
+   below; compare its checksum to the operations record before restoring. The
+   check reads only the archive manifest and never connects to a database or
+   performs a restore:
+
+   ```bash
+   pnpm backup:verify -- /secure/path/haulalert.backup
+   ```
+
+   It confirms the archive contains every durable HaulAlert table required for
+   a recovery rehearsal.
 3. Restore into the empty target using a deployment-scoped database user. Do
    not use `--clean` or target the production database during a rehearsal.
 4. Run the repository's migrations in lexical order through
