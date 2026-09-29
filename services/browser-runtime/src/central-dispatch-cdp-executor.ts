@@ -115,6 +115,7 @@ export class LocalChromeDevToolsRuntime implements ChromeDevToolsRuntime {
   }
 
   public async evaluateJson(target: ChromeDevToolsTarget, expression: string): Promise<unknown> {
+    assertLocalChromeDevToolsWebSocketEndpoint(target.webSocketDebuggerUrl);
     const socket = new WebSocket(target.webSocketDebuggerUrl);
     try {
       await waitForSocketOpen(socket, this.requestTimeoutMs);
@@ -169,6 +170,24 @@ export function assertLocalChromeDevToolsEndpoint(endpoint: URL): void {
     !isLoopbackHost(endpoint.hostname)
   ) {
     throw new Error("Chrome DevTools endpoint must use credential-free loopback HTTP");
+  }
+}
+
+/** Prevents a target-list response from redirecting the bridge to another host. */
+export function assertLocalChromeDevToolsWebSocketEndpoint(value: string): void {
+  let endpoint: URL;
+  try {
+    endpoint = new URL(value);
+  } catch {
+    throw new Error("Chrome DevTools WebSocket endpoint must be a valid URL");
+  }
+  if (
+    endpoint.protocol !== "ws:" ||
+    endpoint.username.length > 0 ||
+    endpoint.password.length > 0 ||
+    !isLoopbackHost(endpoint.hostname)
+  ) {
+    throw new Error("Chrome DevTools WebSocket endpoint must use credential-free loopback WS");
   }
 }
 

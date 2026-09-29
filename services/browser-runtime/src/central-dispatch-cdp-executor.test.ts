@@ -6,6 +6,7 @@ import { createSourceFilterHash } from "@haulalert/filter-compiler";
 import {
   CentralDispatchCdpRequestExecutor,
   CentralDispatchRequestTimeoutError,
+  assertLocalChromeDevToolsWebSocketEndpoint,
   createCentralDispatchCdpSessionClient,
   type ChromeDevToolsRuntime,
   type ChromeDevToolsTarget
@@ -85,6 +86,24 @@ describe("Central Dispatch CDP request executor", () => {
         }
       }),
       (error: unknown) => error instanceof CentralDispatchRequestTimeoutError && error.timeoutMs === 1
+    );
+  });
+
+  it("rejects non-local or credentialed debugger sockets", () => {
+    for (const endpoint of [
+      "ws://192.168.1.25:9222/devtools/page/central-tab",
+      "wss://127.0.0.1:9222/devtools/page/central-tab",
+      "ws://operator:secret@127.0.0.1:9222/devtools/page/central-tab"
+    ]) {
+      assert.throws(
+        () => assertLocalChromeDevToolsWebSocketEndpoint(endpoint),
+        /Chrome DevTools WebSocket endpoint must use credential-free loopback WS/
+      );
+    }
+
+    assert.throws(
+      () => assertLocalChromeDevToolsWebSocketEndpoint("not a URL"),
+      /Chrome DevTools WebSocket endpoint must be a valid URL/
     );
   });
 
