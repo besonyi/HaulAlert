@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { getAdminAccessConfig, getAdminRole, PostgresAdminAuditRepository, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBetaFeedbackRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresPartnerEarningsRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresSubscriptionPortalService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type AdminAccessConfig, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
+import { getAdminAccessConfig, getAdminRole, PostgresAdminAuditRepository, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBetaFeedbackRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresPartnerEarningsRepository, PostgresPartnerLedgerRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresSubscriptionPortalService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type AdminAccessConfig, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
@@ -38,6 +38,7 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
   const telegramUsers = new PostgresTelegramUserResolver(database);
   const partners = new PostgresPartnerAccountRepository(database);
   const partnerEarnings = new PostgresPartnerEarningsRepository(database);
+  const partnerLedger = new PostgresPartnerLedgerRepository(database);
   const audit = new PostgresAdminAuditRepository(database);
   const referrals = new PostgresReferralRepository(database);
   const checkout = config.stripeCheckout === undefined ? undefined : new StripeCheckoutClient(config.stripeCheckout);
@@ -60,7 +61,7 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
         config.telegramBotUsername
       )
     },
-    partners: { approve: (userId) => partners.approve(userId), getEarnings: (userId) => partnerEarnings.getForUser(userId) },
+    partners: { approve: (userId) => partners.approve(userId), getEarnings: (userId) => partnerEarnings.getForUser(userId), getLedger: (userId) => partnerLedger.listForUser(userId) },
     audit,
     ...(billing === undefined ? {} : { billing }),
     ...(config.stripeWebhookSecret === undefined ? {} : {

@@ -339,15 +339,19 @@ test("authenticated customers can submit bounded beta feedback", async () => {
 });
 
 test("authenticated customers can read only their own partner earnings", async () => {
-  const received: string[] = [];
+  const received: Array<{ readonly kind: string; readonly userId: string }> = [];
   const server = createMiniAppApiServer({
     alerts: {} as AlertManagementRepository,
     dashboard: { getForUser: async () => ({ activeAlertCount: 0, loadsFoundLast24Hours: 0, recentNotifications: [] }) },
     partners: {
       approve: async () => undefined,
       getEarnings: async (userId) => {
-        received.push(userId);
+        received.push({ kind: "earnings", userId });
         return { status: "active", pendingCents: 375, availableCents: 750 };
+      },
+      getLedger: async (userId) => {
+        received.push({ kind: "ledger", userId });
+        return [{ id: "entry-1", entryType: "commission_available", amountCents: 750 }];
       }
     },
     authenticate: (initData) => ({ id: `user-${initData}`, firstName: "Alex" })
@@ -360,7 +364,10 @@ test("authenticated customers can read only their own partner earnings", async (
     const response = await fetch(`http://127.0.0.1:${address.port}/v1/partner/earnings`, { headers: { authorization: "tma verified" } });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { earnings: { status: "active", pendingCents: 375, availableCents: 750 } });
-    assert.deepEqual(received, ["user-verified"]);
+    const ledger = await fetch(`http://127.0.0.1:${address.port}/v1/partner/ledger`, { headers: { authorization: "tma verified" } });
+    assert.equal(ledger.status, 200);
+    assert.deepEqual(await ledger.json(), { entries: [{ id: "entry-1", entryType: "commission_available", amountCents: 750 }] });
+    assert.deepEqual(received, [{ kind: "earnings", userId: "user-verified" }, { kind: "ledger", userId: "user-verified" }]);
   } finally {
     await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
   }

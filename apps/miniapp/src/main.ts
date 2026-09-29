@@ -8,6 +8,7 @@ import {
   type MiniAppDashboard,
   type MiniAppEntitlement,
   type MiniAppPartnerEarnings,
+  type MiniAppPartnerLedgerEntry,
   type MiniAppReferralSummary
 } from "./api.js";
 import { locationsFromForm } from "./location-form.js";
@@ -44,6 +45,7 @@ let dashboard: MiniAppDashboard | undefined;
 let entitlement: MiniAppEntitlement | undefined;
 let referral: MiniAppReferralSummary | undefined;
 let partnerEarnings: MiniAppPartnerEarnings | null | undefined;
+let partnerLedger: readonly MiniAppPartnerLedgerEntry[] = [];
 let screen: "dashboard" | "create" = "dashboard";
 let editingAlert: MiniAppAlert | undefined;
 let blockedBrokerIds: readonly string[] = [];
@@ -61,8 +63,8 @@ async function refresh(): Promise<void> {
   refreshing = true;
   render();
   try {
-    [alerts, dashboard, entitlement, referral, partnerEarnings] = await Promise.all([
-      client.listAlerts(), client.getDashboard(), client.getEntitlement(), client.getReferralSummary(), client.getPartnerEarnings()
+    [alerts, dashboard, entitlement, referral, partnerEarnings, partnerLedger] = await Promise.all([
+      client.listAlerts(), client.getDashboard(), client.getEntitlement(), client.getReferralSummary(), client.getPartnerEarnings(), client.getPartnerLedger()
     ]);
     message = "";
   } catch (error: unknown) {
@@ -153,7 +155,21 @@ function partnerEarningsMarkup(): string {
   const pending = formatCents(partnerEarnings.pendingCents);
   const available = formatCents(partnerEarnings.availableCents);
   const availability = partnerEarnings.nextAvailableAt === null ? "No commissions are in a hold period." : `Next release: ${formatTime(partnerEarnings.nextAvailableAt)}.`;
-  return `<section class="partner-earnings"><div><p class="eyebrow">PARTNER EARNINGS</p><h2>${escapeHtml(partnerEarnings.status === "active" ? "Commission balance" : "Partner review")}</h2></div><p>${escapeHtml(partnerEarnings.status === "active" ? `${rate} · ${partnerEarnings.holdDays}-day hold before availability.` : "Your Partner account is not active, so commissions are not available for payout.")}</p><div class="partner-earnings-stats"><span><strong>${escapeHtml(pending)}</strong> pending</span><span><strong>${escapeHtml(available)}</strong> available</span><span><strong>${escapeHtml(formatCents(partnerEarnings.lifetimeEarnedCents))}</strong> lifetime</span></div><small>${escapeHtml(availability)} No wallet or withdrawal is available yet.</small></section>`;
+  return `<section class="partner-earnings"><div><p class="eyebrow">PARTNER EARNINGS</p><h2>${escapeHtml(partnerEarnings.status === "active" ? "Commission balance" : "Partner review")}</h2></div><p>${escapeHtml(partnerEarnings.status === "active" ? `${rate} · ${partnerEarnings.holdDays}-day hold before availability.` : "Your Partner account is not active, so commissions are not available for payout.")}</p><div class="partner-earnings-stats"><span><strong>${escapeHtml(pending)}</strong> pending</span><span><strong>${escapeHtml(available)}</strong> available</span><span><strong>${escapeHtml(formatCents(partnerEarnings.lifetimeEarnedCents))}</strong> lifetime</span></div>${partnerLedgerMarkup()}<small>${escapeHtml(availability)} No wallet or withdrawal is available yet.</small></section>`;
+}
+
+function partnerLedgerMarkup(): string {
+  if (partnerLedger.length === 0) return `<p class="partner-ledger-empty">No available-balance activity yet.</p>`;
+  return `<div class="partner-ledger"><strong>Recent balance activity</strong>${partnerLedger.map((entry) => `<div><span>${escapeHtml(partnerLedgerLabel(entry.entryType))}</span><b class="${entry.amountCents < 0 ? "debit" : "credit"}">${escapeHtml(formatCents(entry.amountCents))}</b><time>${escapeHtml(formatTime(entry.createdAt))}</time></div>`).join("")}</div>`;
+}
+
+function partnerLedgerLabel(entryType: MiniAppPartnerLedgerEntry["entryType"]): string {
+  if (entryType === "commission_available") return "Commission released";
+  if (entryType === "refund_reversal") return "Refund reversal";
+  if (entryType === "chargeback_clawback") return "Chargeback clawback";
+  if (entryType === "withdrawal") return "Withdrawal";
+  if (entryType === "cashout_fee") return "Cash-out fee";
+  return "Manual adjustment";
 }
 
 function recentNotificationsMarkup(): string {

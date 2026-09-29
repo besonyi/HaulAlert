@@ -40,6 +40,7 @@ export interface MiniAppApiDependencies {
     approve(userId: string): Promise<unknown | undefined>;
     setRiskLevel?(userId: string, riskLevel: "new" | "trusted" | "high_risk"): Promise<unknown | undefined>;
     getEarnings?(userId: string): Promise<unknown | undefined>;
+    getLedger?(userId: string): Promise<unknown>;
   };
   readonly audit?: {
     record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested" | "partner_risk_updated" | "beta_feedback_reviewed"; readonly subjectUserId: string }): Promise<void>;
@@ -218,6 +219,10 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
     if (pathname === "/v1/partner/earnings" && request.method === "GET") {
       if (dependencies.partners?.getEarnings === undefined) return { statusCode: 404, body: { error: "not_found" } };
       return { statusCode: 200, body: { earnings: await dependencies.partners.getEarnings(user.id) } };
+    }
+    if (pathname === "/v1/partner/ledger" && request.method === "GET") {
+      if (dependencies.partners?.getLedger === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      return { statusCode: 200, body: { entries: await dependencies.partners.getLedger(user.id) } };
     }
     if (pathname === "/v1/dashboard" && request.method === "GET") {
       return { statusCode: 200, body: { dashboard: await dependencies.dashboard.getForUser(user.id) } };

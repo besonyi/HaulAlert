@@ -74,6 +74,13 @@ export interface MiniAppPartnerEarnings {
   readonly nextAvailableAt: string | null;
 }
 
+export interface MiniAppPartnerLedgerEntry {
+  readonly id: string;
+  readonly entryType: "commission_available" | "refund_reversal" | "chargeback_clawback" | "withdrawal" | "cashout_fee" | "manual_adjustment";
+  readonly amountCents: number;
+  readonly createdAt: string;
+}
+
 export class MiniAppApiError extends Error {
   public constructor(
     readonly statusCode: number,
@@ -129,6 +136,11 @@ export class MiniAppApiClient {
   public async getPartnerEarnings(): Promise<MiniAppPartnerEarnings | null> {
     const response = await this.send("/v1/partner/earnings", "GET");
     return (await response.json() as { earnings: MiniAppPartnerEarnings | null }).earnings;
+  }
+
+  public async getPartnerLedger(): Promise<readonly MiniAppPartnerLedgerEntry[]> {
+    const response = await this.send("/v1/partner/ledger", "GET");
+    return (await response.json() as { entries: MiniAppPartnerLedgerEntry[] }).entries;
   }
 
   public async submitBetaFeedback(message: string): Promise<void> {
