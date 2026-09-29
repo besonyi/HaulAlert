@@ -76,6 +76,13 @@ opens after three failures and pauses calls for 60 seconds before a probe. Tune
 the two `CENTRAL_DISPATCH_CIRCUIT_BREAKER_*` settings only with recorded
 capacity and provider-failure evidence.
 
+The worker exposes local-only `GET /healthz` (process liveness) and
+`GET /readyz` (authenticated browser-session readiness) on
+`127.0.0.1:3010` by default. Set `CENTRAL_DISPATCH_HEALTH_PORT` only when a
+different loopback port is needed; do not publish or proxy it. The API and Bot
+can be checked together with `pnpm ops:probes` once their public base URLs are
+configured as described in the [production runbook](docs/operations/production-runbook.md).
+
 To receive Telegram updates, set the same `TELEGRAM_WEBHOOK_SECRET` in Telegram's `setWebhook` request, expose `TELEGRAM_WEBHOOK_PATH` publicly, then run the Bot server:
 
 ```bash
