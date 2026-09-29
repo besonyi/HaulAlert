@@ -35,6 +35,7 @@ const claimedDelivery: ClaimedNotificationDelivery = {
 class FakeRepository implements DurableNotificationDeliveryRepository {
   public markedSent: string[] = [];
   public retries: { deliveryId: string; nextAttemptAt: Date }[] = [];
+  public releasedClaims: { deliveryId: string; nextAttemptAt: Date }[] = [];
   public deadLetters: string[] = [];
   public leaseRecoveryCalls: { leaseDurationMs: number; maximumAttempts: number; now: Date | undefined }[] = [];
 
@@ -60,6 +61,11 @@ class FakeRepository implements DurableNotificationDeliveryRepository {
     availableAt: Date
   ): Promise<boolean> {
     this.retries.push({ deliveryId, nextAttemptAt: availableAt });
+    return true;
+  }
+
+  public async releaseClaim(deliveryId: string, availableAt: Date): Promise<boolean> {
+    this.releasedClaims.push({ deliveryId, nextAttemptAt: availableAt });
     return true;
   }
 
@@ -98,6 +104,34 @@ describe("PostgreSQL notification worker", () => {
     const outcome = (await worker.processBatch(10, { now }))[0];
     assert.equal(outcome?.status, "retry-scheduled");
     assert.equal(repository.retries[0]?.nextAttemptAt.toISOString(), "2026-09-22T12:00:07.000Z");
+  });
+
+  it("defers the rest of a claimed batch after Telegram rate limits the bot", async () => {
+    const second = { ...claimedDelivery, deliveryId: "delivery-2" };
+    const third = { ...claimedDelivery, deliveryId: "delivery-3" };
+    const repository = new FakeRepository([claimedDelivery, second, third]);
+    let sends = 0;
+    const transport: TelegramTransport = {
+      send: async () => {
+        sends += 1;
+        throw new TelegramRateLimitError(7_000);
+      }
+    };
+    const worker = new PostgresNotificationWorker(repository, transport, { initialRetryDelayMs: 100 });
+
+    const outcomes = await worker.processBatch(10, { now });
+
+    assert.equal(sends, 1);
+    assert.deepEqual(outcomes.map((outcome) => outcome.status), [
+      "retry-scheduled",
+      "deferred-rate-limit",
+      "deferred-rate-limit"
+    ]);
+    assert.deepEqual(repository.releasedClaims.map((claim) => claim.deliveryId), ["delivery-2", "delivery-3"]);
+    assert.deepEqual(repository.releasedClaims.map((claim) => claim.nextAttemptAt.toISOString()), [
+      "2026-09-22T12:00:07.000Z",
+      "2026-09-22T12:00:07.000Z"
+    ]);
   });
 
   it("does not resend a delivery whose database claim was lost after sending", async () => {

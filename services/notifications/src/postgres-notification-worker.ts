@@ -21,6 +21,7 @@ export interface DurableWorkerOptions {
 export type DurableWorkerOutcome =
   | { readonly status: "sent"; readonly deliveryId: string }
   | { readonly status: "retry-scheduled"; readonly deliveryId: string; readonly nextAttemptAt: Date }
+  | { readonly status: "deferred-rate-limit"; readonly deliveryId: string; readonly nextAttemptAt: Date }
   | { readonly status: "dead-letter"; readonly deliveryId: string }
   | { readonly status: "lost-claim"; readonly deliveryId: string };
 
@@ -64,10 +65,20 @@ export class PostgresNotificationWorker {
     const deliveries = await this.repository.claimDue(limit, now);
     const outcomes: DurableWorkerOutcome[] = [];
 
-    for (const delivery of deliveries) {
+    for (let index = 0; index < deliveries.length; index += 1) {
+      const delivery = deliveries[index];
+      if (delivery === undefined) continue;
       const sent = await this.send(delivery, options);
       if (sent instanceof Error) {
         outcomes.push(await this.handleFailure(delivery, sent, now));
+        if (sent instanceof TelegramRateLimitError) {
+          outcomes.push(...await this.deferRateLimitedClaims(
+            deliveries.slice(index + 1),
+            new Date(now.getTime() + sent.retryAfterMs),
+            now
+          ));
+          break;
+        }
         continue;
       }
 
@@ -126,5 +137,24 @@ export class PostgresNotificationWorker {
     return scheduled
       ? { status: "retry-scheduled", deliveryId: delivery.deliveryId, nextAttemptAt }
       : { status: "lost-claim", deliveryId: delivery.deliveryId };
+  }
+
+  /**
+   * A Telegram 429 applies to this bot, not only to the delivery that exposed
+   * it. Return untouched claims to the durable queue without consuming an
+   * attempt or issuing additional requests while the server-directed delay is
+   * active.
+   */
+  private async deferRateLimitedClaims(
+    deliveries: readonly ClaimedNotificationDelivery[],
+    nextAttemptAt: Date,
+    now: Date
+  ): Promise<readonly DurableWorkerOutcome[]> {
+    return Promise.all(deliveries.map(async (delivery) => {
+      const released = await this.repository.releaseClaim(delivery.deliveryId, nextAttemptAt, now);
+      return released
+        ? { status: "deferred-rate-limit", deliveryId: delivery.deliveryId, nextAttemptAt }
+        : { status: "lost-claim", deliveryId: delivery.deliveryId };
+    }));
   }
 }

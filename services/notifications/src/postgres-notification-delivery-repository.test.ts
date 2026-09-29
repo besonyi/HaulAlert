@@ -117,4 +117,25 @@ describe("PostgreSQL notification delivery repository", () => {
     assert.match(capturedStatement, /status = 'delivering'/);
     assert.match(capturedStatement, /INSERT INTO notification_attempts/);
   });
+
+  it("releases a rate-limited claim without recording a delivery attempt", async () => {
+    let captured: { statement: string; parameters: readonly unknown[] } | undefined;
+    const database: SqlExecutor = {
+      query: async (statement, parameters) => {
+        captured = { statement, parameters };
+        return { rows: [{ id: "44444444-4444-4444-8444-444444444444" }] };
+      }
+    };
+    const repository = new PostgresNotificationDeliveryRepository(database);
+
+    assert.equal(await repository.releaseClaim(
+      "44444444-4444-4444-8444-444444444444",
+      new Date("2026-09-23T12:00:07.000Z"),
+      new Date("2026-09-23T12:00:00.000Z")
+    ), true);
+    assert.match(captured?.statement ?? "", /status = 'retry_scheduled'/);
+    assert.match(captured?.statement ?? "", /Deferred because Telegram rate limit is active/);
+    assert.doesNotMatch(captured?.statement ?? "", /attempt_count/);
+    assert.doesNotMatch(captured?.statement ?? "", /notification_attempts/);
+  });
 });

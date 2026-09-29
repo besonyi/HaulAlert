@@ -27,6 +27,7 @@ export interface DurableNotificationDeliveryRepository {
   claimDue(limit: number, now?: Date): Promise<readonly ClaimedNotificationDelivery[]>;
   markSent(deliveryId: string, telegramMessageId: string | null, now?: Date): Promise<boolean>;
   scheduleRetry(deliveryId: string, errorMessage: string, availableAt: Date, now?: Date): Promise<boolean>;
+  releaseClaim(deliveryId: string, availableAt: Date, now?: Date): Promise<boolean>;
   markDeadLetter(deliveryId: string, errorMessage: string, now?: Date): Promise<boolean>;
 }
 
@@ -205,6 +206,23 @@ export class PostgresNotificationDeliveryRepository implements DurableNotificati
       )
       SELECT delivery_id FROM recorded`,
       [deliveryId, errorMessage, availableAt.toISOString(), now.toISOString()]
+    );
+  }
+
+  /** Defers a claimed job that was not sent because a shared Telegram limit is active. */
+  public async releaseClaim(
+    deliveryId: string,
+    availableAt: Date,
+    now: Date = new Date()
+  ): Promise<boolean> {
+    return this.transition(
+      `UPDATE notification_deliveries
+      SET status = 'retry_scheduled', available_at = $2::timestamptz,
+        claimed_at = NULL, last_error = 'Deferred because Telegram rate limit is active',
+        updated_at = $3::timestamptz
+      WHERE id = $1::uuid AND status = 'delivering'
+      RETURNING id`,
+      [deliveryId, availableAt.toISOString(), now.toISOString()]
     );
   }
 
