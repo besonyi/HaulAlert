@@ -18,6 +18,9 @@ test("partner commission release claims only due pending commissions in a bounde
   assert.match(statement, /status = 'pending' AND hold_until <= now\(\)/);
   assert.match(statement, /FOR UPDATE SKIP LOCKED/);
   assert.match(statement, /status = 'available'/);
+  assert.match(statement, /INSERT INTO partner_ledger_entries/);
+  assert.match(statement, /'commission_available'/);
+  assert.match(statement, /ON CONFLICT DO NOTHING/);
 });
 
 test("partner commission release rejects unsafe batch sizes", async () => {

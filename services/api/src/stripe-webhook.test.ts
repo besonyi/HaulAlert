@@ -75,6 +75,7 @@ test("Stripe processing records the event before updating payment and referral s
   assert.match(statement, /ON CONFLICT \(stripe_invoice_id\) DO NOTHING/);
   assert.match(statement, /stripe_charge_id/);
   assert.match(statement, /charge.refunded', 'charge.dispute.created/);
+  assert.match(statement, /reversal_ledger/);
 });
 
 test("refunds cancel pending commissions and reverse released commissions by Stripe charge", async () => {
@@ -95,6 +96,9 @@ test("refunds cancel pending commissions and reverse released commissions by Str
   assert.equal(parameters?.[13], "ch_paid");
   assert.match(statement, /THEN 'cancelled' ELSE 'reversed'/);
   assert.match(statement, /status IN \('pending', 'available'\)/);
+  assert.match(statement, /partner_ledger_entries/);
+  assert.match(statement, /refund_reversal/);
+  assert.match(statement, /was_available AND commission_amount_cents <> 0/);
 });
 
 test("paid invoices require a USD integer amount before they can create a commission", () => {

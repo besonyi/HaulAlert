@@ -16,12 +16,23 @@ export class PostgresPartnerCommissionReleaseRepository {
         ORDER BY hold_until ASC, id ASC
         LIMIT $1
         FOR UPDATE SKIP LOCKED
+      ), released_commissions AS (
+        UPDATE partner_commissions
+        SET status = 'available', available_at = now(), updated_at = now()
+        FROM due_commissions
+        WHERE partner_commissions.id = due_commissions.id
+        RETURNING partner_commissions.id, partner_commissions.partner_account_id,
+          partner_commissions.partner_user_id, partner_commissions.commission_amount_cents
+      ), commission_ledger AS (
+        INSERT INTO partner_ledger_entries (
+          partner_account_id, partner_user_id, partner_commission_id, entry_type, amount_cents
+        )
+        SELECT partner_account_id, partner_user_id, id, 'commission_available', commission_amount_cents
+        FROM released_commissions
+        WHERE commission_amount_cents <> 0
+        ON CONFLICT DO NOTHING
       )
-      UPDATE partner_commissions
-      SET status = 'available', available_at = now(), updated_at = now()
-      FROM due_commissions
-      WHERE partner_commissions.id = due_commissions.id
-      RETURNING partner_commissions.id`,
+      SELECT id FROM released_commissions`,
       [limit]
     );
     return result.rows.length;

@@ -98,7 +98,7 @@ for protected actions.
 ## Recovery and rollback checks
 
 Before a production release, confirm that all database migrations through
-`0017_partner_risk_audit.sql` have been applied, then verify the API readiness and
+`0018_partner_ledger.sql` have been applied, then verify the API readiness and
 Bot liveness probes. If a release causes a customer-impacting regression,
 return to the last known-good application revision while preserving PostgreSQL
 data. Database migrations are forward-only: do not roll back schema by deleting

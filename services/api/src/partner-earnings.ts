@@ -19,14 +19,16 @@ export class PostgresPartnerEarningsRepository {
   public async getForUser(userId: string): Promise<PartnerEarningsSummary | undefined> {
     const result = await this.database.query(
       `SELECT partner_accounts.status, partner_accounts.commission_rate_basis_points, partner_accounts.hold_days,
-        COALESCE(sum(partner_commissions.commission_amount_cents) FILTER (WHERE partner_commissions.status = 'pending'), 0) AS pending_cents,
-        COALESCE(sum(partner_commissions.commission_amount_cents) FILTER (WHERE partner_commissions.status = 'available'), 0) AS available_cents,
-        COALESCE(sum(partner_commissions.commission_amount_cents) FILTER (WHERE partner_commissions.status IN ('pending', 'available', 'reversed')), 0) AS lifetime_earned_cents,
-        min(partner_commissions.hold_until) FILTER (WHERE partner_commissions.status = 'pending') AS next_available_at
+        COALESCE((SELECT sum(commission_amount_cents) FROM partner_commissions
+          WHERE partner_commissions.partner_account_id = partner_accounts.id AND partner_commissions.status = 'pending'), 0) AS pending_cents,
+        COALESCE((SELECT sum(amount_cents) FROM partner_ledger_entries
+          WHERE partner_ledger_entries.partner_account_id = partner_accounts.id), 0) AS available_cents,
+        COALESCE((SELECT sum(commission_amount_cents) FROM partner_commissions
+          WHERE partner_commissions.partner_account_id = partner_accounts.id AND partner_commissions.status IN ('pending', 'available', 'reversed')), 0) AS lifetime_earned_cents,
+        (SELECT min(hold_until) FROM partner_commissions
+          WHERE partner_commissions.partner_account_id = partner_accounts.id AND partner_commissions.status = 'pending') AS next_available_at
       FROM partner_accounts
-      LEFT JOIN partner_commissions ON partner_commissions.partner_account_id = partner_accounts.id
-      WHERE partner_accounts.user_id = $1::uuid
-      GROUP BY partner_accounts.status, partner_accounts.commission_rate_basis_points, partner_accounts.hold_days`,
+      WHERE partner_accounts.user_id = $1::uuid`,
       [userId]
     );
     const row = result.rows[0];
@@ -40,7 +42,7 @@ function summary(row: Record<string, unknown>): PartnerEarningsSummary {
     commissionRateBasisPoints: cents(row.commission_rate_basis_points, "commission rate"),
     holdDays: cents(row.hold_days, "hold days"),
     pendingCents: cents(row.pending_cents, "pending commission"),
-    availableCents: cents(row.available_cents, "available commission"),
+    availableCents: signedCents(row.available_cents, "available commission"),
     lifetimeEarnedCents: cents(row.lifetime_earned_cents, "lifetime commission"),
     nextAvailableAt: row.next_available_at === null || row.next_available_at === undefined ? null : timestamp(row.next_available_at)
   };
@@ -54,6 +56,12 @@ function partnerStatus(value: unknown): PartnerStatus {
 function cents(value: unknown, name: string): number {
   const result = typeof value === "number" ? value : Number(value);
   if (!Number.isSafeInteger(result) || result < 0) throw new Error(`Expected ${name}`);
+  return result;
+}
+
+function signedCents(value: unknown, name: string): number {
+  const result = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(result)) throw new Error(`Expected ${name}`);
   return result;
 }
 

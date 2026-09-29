@@ -169,6 +169,19 @@ export class PostgresStripeWebhookEventProcessor implements StripeWebhookEventPr
           AND $14::text IS NOT NULL
           AND partner_commissions.stripe_charge_id = $14::text
           AND partner_commissions.status IN ('pending', 'available')
+        RETURNING partner_commissions.id, partner_commissions.partner_account_id,
+          partner_commissions.partner_user_id, partner_commissions.commission_amount_cents,
+          partner_commissions.reversed_at IS NOT NULL AS was_available
+      ), reversal_ledger AS (
+        INSERT INTO partner_ledger_entries (
+          partner_account_id, partner_user_id, partner_commission_id, entry_type, amount_cents
+        )
+        SELECT partner_account_id, partner_user_id, id,
+          CASE WHEN $2::text = 'charge.dispute.created' THEN 'chargeback_clawback' ELSE 'refund_reversal' END,
+          -commission_amount_cents
+        FROM reversed_commission
+        WHERE was_available AND commission_amount_cents <> 0
+        ON CONFLICT DO NOTHING
       )
       SELECT (SELECT count(*) FROM matched_subscription) AS matched_count,
         (SELECT count(*) FROM inserted_event) AS inserted_count`,
