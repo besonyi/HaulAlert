@@ -30,6 +30,10 @@ test("HTTP server forwards only the configured webhook path to the handler", asy
     assert.equal(health.headers.get("x-content-type-options"), "nosniff");
     assert.equal(health.headers.get("x-frame-options"), "DENY");
     assert.equal(health.headers.get("referrer-policy"), "no-referrer");
+  assert.match(
+    health.headers.get("x-request-id") ?? "",
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
     assert.equal((await fetch(`${baseUrl}/healthz`, { method: "POST" })).status, 405);
     assert.equal(received.length, 0);
 

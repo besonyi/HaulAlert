@@ -50,7 +50,7 @@ async function proxyApi(request, response, url) {
   const body = request.method === "GET" || request.method === "HEAD" ? undefined : await readBody(request);
   const upstream = await fetchApi(target, { method: request.method, headers, body });
   response.statusCode = upstream.status;
-  for (const name of ["content-type", "cache-control"]) {
+  for (const name of ["content-type", "cache-control", "x-request-id"]) {
     const value = upstream.headers.get(name);
     if (value !== null) response.setHeader(name, value);
   }

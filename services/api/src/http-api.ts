@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
 
 import type {
   AlertManagementRepository,
@@ -52,9 +53,13 @@ export interface MiniAppApiDependencies {
 /** Creates the authenticated, customer-facing API used by the Telegram Mini App. */
 export function createMiniAppApiServer(dependencies: MiniAppApiDependencies): Server {
   return createServer((request, response) => {
+    const requestId = randomUUID();
     void handleRequest(request, dependencies)
-      .then((result) => writeJson(response, result.statusCode, result.body))
-      .catch(() => writeJson(response, 500, { error: "internal_error" }));
+      .then((result) => writeJson(response, result.statusCode, result.body, requestId))
+      .catch(() => {
+        console.error(`Mini App API request failed; request_id=${requestId}`);
+        writeJson(response, 500, { error: "internal_error" }, requestId);
+      });
   });
 }
 
@@ -284,9 +289,10 @@ function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function writeJson(response: ServerResponse, statusCode: number, body: unknown): void {
+function writeJson(response: ServerResponse, statusCode: number, body: unknown, requestId: string): void {
   response.statusCode = statusCode;
   response.setHeader("cache-control", "no-store");
+  response.setHeader("x-request-id", requestId);
   setHttpSecurityHeaders(response);
   if (statusCode === 204) {
     response.end();

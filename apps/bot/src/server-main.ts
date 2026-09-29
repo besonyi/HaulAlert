@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,10 +48,12 @@ export function createTelegramWebhookServer(
   webhookPath: string
 ): Server {
   return createServer((request, response) => {
+    const requestId = randomUUID();
     void handleHttpRequest(request, webhookPath, handler)
       .then((result) => {
         response.statusCode = result.statusCode;
         response.setHeader("cache-control", "no-store");
+        response.setHeader("x-request-id", requestId);
         setHttpSecurityHeaders(response);
         if (result.body === undefined) {
           response.end();
@@ -61,8 +64,10 @@ export function createTelegramWebhookServer(
       })
       .catch((error: unknown) => {
         const statusCode = error instanceof RequestBodyTooLargeError ? 413 : 500;
+        if (statusCode === 500) console.error(`Telegram Bot request failed; request_id=${requestId}`);
         response.statusCode = statusCode;
         response.setHeader("cache-control", "no-store");
+        response.setHeader("x-request-id", requestId);
         setHttpSecurityHeaders(response);
         response.end();
       });

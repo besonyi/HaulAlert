@@ -156,6 +156,10 @@ test("health endpoints are public while readiness verifies the configured depend
     assert.equal(health.headers.get("x-content-type-options"), "nosniff");
     assert.equal(health.headers.get("x-frame-options"), "DENY");
     assert.equal(health.headers.get("referrer-policy"), "no-referrer");
+  assert.match(
+    health.headers.get("x-request-id") ?? "",
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
     assert.deepEqual(await (await fetch(`${baseUrl}/readyz`)).json(), { status: "ready" });
     assert.equal(readinessChecks, 1);
     assert.equal((await fetch(`${baseUrl}/healthz`, { method: "POST" })).status, 405);
