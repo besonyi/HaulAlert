@@ -14,6 +14,9 @@ const loadCount = getPositiveInteger("HAULALERT_LOAD_TEST_LOADS", 300, 10_000);
 const tabCount = getPositiveInteger("HAULALERT_LOAD_TEST_TABS", 2_000, 100_000);
 const notificationCount = getPositiveInteger("HAULALERT_LOAD_TEST_NOTIFICATIONS", 3_000, 100_000);
 const now = new Date("2026-09-28T12:00:00.000Z");
+const workloadStartedAt = performance.now();
+const initialCpuUsage = process.cpuUsage();
+const initialRssBytes = process.memoryUsage().rss;
 
 const index = new AlertCandidateIndex();
 const buildStartedAt = performance.now();
@@ -123,13 +126,20 @@ if (
 ) {
   throw new Error("Notification smoke workload did not complete every queued delivery");
 }
+const cpuUsage = process.cpuUsage(initialCpuUsage);
+const finalRssBytes = process.memoryUsage().rss;
 
 console.log(JSON.stringify({
   evidence: {
     executedAt: new Date().toISOString(),
     gitCommit: currentGitCommit(),
     nodeVersion: process.version,
-    platform: `${process.platform}-${process.arch}`
+    platform: `${process.platform}-${process.arch}`,
+    workloadMilliseconds: round(elapsed(workloadStartedAt)),
+    cpuUserMilliseconds: round(cpuUsage.user / 1_000),
+    cpuSystemMilliseconds: round(cpuUsage.system / 1_000),
+    finalRssBytes,
+    rssDeltaBytes: finalRssBytes - initialRssBytes
   },
   workload: { alertCount, loadCount, tabCount, notificationCount },
   results: {

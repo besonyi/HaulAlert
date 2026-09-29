@@ -32,9 +32,9 @@ pnpm load:test
 ```
 
 The JSON includes its execution timestamp, commit SHA when Git is available,
-Node version, platform, workload, and results. Record it with the release
-evidence; do not compare absolute milliseconds between different machines as
-an SLO.
+Node version, platform, CPU time, RSS-memory data, workload, and results.
+Record it with the release evidence; do not compare absolute milliseconds or
+memory values between different machines as an SLO.
 
 ## 2. Run a production-like exercise before beta expansion
 
