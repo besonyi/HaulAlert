@@ -12,6 +12,7 @@ describe("Central Dispatch worker runtime config", () => {
     assert.equal(config.batchSize, 10);
     assert.equal(config.pollIntervalMs, 30_000);
     assert.equal(config.requestTimeoutMs, 15_000);
+    assert.equal(config.healthPort, 3_010);
   });
 
   it("reads validated polling settings without reading browser credentials", () => {
@@ -22,7 +23,8 @@ describe("Central Dispatch worker runtime config", () => {
       CENTRAL_DISPATCH_BATCH_SIZE: "3",
       CENTRAL_DISPATCH_POLL_INTERVAL_MS: "45000",
       CENTRAL_DISPATCH_ALERT_REFRESH_INTERVAL_MS: "9000",
-      CENTRAL_DISPATCH_REQUEST_TIMEOUT_MS: "12000"
+      CENTRAL_DISPATCH_REQUEST_TIMEOUT_MS: "12000",
+      CENTRAL_DISPATCH_HEALTH_PORT: "3011"
     });
 
     assert.equal(config.sessionId, "office-chrome");
@@ -31,12 +33,20 @@ describe("Central Dispatch worker runtime config", () => {
     assert.equal(config.pollIntervalMs, 45_000);
     assert.equal(config.alertRefreshIntervalMs, 9_000);
     assert.equal(config.requestTimeoutMs, 12_000);
+    assert.equal(config.healthPort, 3_011);
   });
 
   it("rejects unsafe polling values", () => {
     assert.throws(
       () => getCentralDispatchWorkerRuntimeConfig({ DATABASE_URL: "postgresql://localhost/haulalert", CENTRAL_DISPATCH_BATCH_SIZE: "0" }),
       /CENTRAL_DISPATCH_BATCH_SIZE must be a positive integer/
+    );
+  });
+
+  it("rejects an invalid local health port", () => {
+    assert.throws(
+      () => getCentralDispatchWorkerRuntimeConfig({ DATABASE_URL: "postgresql://localhost/haulalert", CENTRAL_DISPATCH_HEALTH_PORT: "65536" }),
+      /CENTRAL_DISPATCH_HEALTH_PORT must be an integer between 1 and 65535/
     );
   });
 

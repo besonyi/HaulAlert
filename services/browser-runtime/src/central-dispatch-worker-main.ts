@@ -15,6 +15,7 @@ import { AsyncNewLoadDetector } from "@haulalert/new-load-detector";
 import { Pool } from "pg";
 
 import { assertLocalChromeDevToolsEndpoint } from "./central-dispatch-cdp-executor.js";
+import { CentralDispatchRuntimeHealth, createCentralDispatchHealthServer } from "./central-dispatch-health-server.js";
 import {
   BrowserRuntimeOrchestrator,
   BrowserScanCoordinator,
@@ -41,6 +42,8 @@ export interface CentralDispatchWorkerRuntimeConfig {
   readonly circuitBreakerCooldownMs: number;
   readonly alertRefreshIntervalMs: number;
   readonly requestTimeoutMs: number;
+  /** Loopback-only port for process liveness and credential-free browser-session readiness. */
+  readonly healthPort: number;
 }
 
 /** Reads the non-secret configuration for the Central Dispatch runtime process. */
@@ -80,7 +83,8 @@ export function getCentralDispatchWorkerRuntimeConfig(
       environment.CENTRAL_DISPATCH_REQUEST_TIMEOUT_MS,
       15_000,
       "CENTRAL_DISPATCH_REQUEST_TIMEOUT_MS"
-    )
+    ),
+    healthPort: getPort(environment.CENTRAL_DISPATCH_HEALTH_PORT, 3_010, "CENTRAL_DISPATCH_HEALTH_PORT")
   };
 }
 
@@ -89,6 +93,7 @@ export async function runCentralDispatchWorker(
   config: CentralDispatchWorkerRuntimeConfig = getCentralDispatchWorkerRuntimeConfig()
 ): Promise<void> {
   const pool = new Pool({ connectionString: config.databaseUrl });
+  let healthServer: import("node:http").Server | undefined;
   try {
     const database = new PgPoolSqlExecutor(pool);
     const runtime = new BrowserRuntime();
@@ -132,6 +137,9 @@ export async function runCentralDispatchWorker(
     );
     const healthReporter = new CentralDispatchHealthReporter((message) => console.info(message));
     const tabReporter = new CentralDispatchTabReporter(runtime, (message) => console.info(message));
+    const runtimeHealth = new CentralDispatchRuntimeHealth();
+    healthServer = createCentralDispatchHealthServer(runtimeHealth);
+    await listenLoopback(healthServer, config.healthPort);
 
     await new CentralDispatchPollingWorker(cycle, {
       batchSize: config.batchSize,
@@ -140,12 +148,17 @@ export async function runCentralDispatchWorker(
       circuitBreakerCooldownMs: config.circuitBreakerCooldownMs,
       onCircuitOpen: (retryAt) => console.warn(`Central Dispatch circuit opened; next provider attempt at ${retryAt.toISOString()}.`),
       onCycleComplete: (result) => {
+        runtimeHealth.reportSession(result.health.status);
         healthReporter.report(result);
         tabReporter.report();
       },
-      onCycleError: () => console.error("Central Dispatch worker cycle failed; cycle will retry.")
+      onCycleError: () => {
+        runtimeHealth.reportCycleFailure();
+        console.error("Central Dispatch worker cycle failed; cycle will retry.");
+      }
     }).run();
   } finally {
+    await closeServer(healthServer);
     await pool.end();
   }
 }
@@ -178,6 +191,30 @@ function getPositiveInteger(value: string | undefined, fallback: number, variabl
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${variableName} must be a positive integer`);
   return parsed;
+}
+
+function getPort(value: string | undefined, fallback: number, variableName: string): number {
+  const port = getPositiveInteger(value, fallback, variableName);
+  if (port > 65_535) throw new Error(`${variableName} must be an integer between 1 and 65535`);
+  return port;
+}
+
+function listenLoopback(server: import("node:http").Server, port: number): Promise<void> {
+  return new Promise((resolveListening, reject) => {
+    const onError = (error: Error): void => reject(error);
+    server.once("error", onError);
+    server.listen(port, "127.0.0.1", () => {
+      server.off("error", onError);
+      resolveListening();
+    });
+  });
+}
+
+function closeServer(server: import("node:http").Server | undefined): Promise<void> {
+  if (server === undefined || !server.listening) return Promise.resolve();
+  return new Promise((resolveClosing, reject) => {
+    server.close((error) => error === undefined ? resolveClosing() : reject(error));
+  });
 }
 
 function isMainModule(): boolean {

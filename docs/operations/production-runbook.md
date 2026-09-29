@@ -12,7 +12,7 @@ browser session material.
 | Mini App API | `GET /healthz` | `200 {"status":"ok"}` | HTTP process is running. |
 | Mini App API | `GET /readyz` | `200 {"status":"ready"}` | HTTP process can query PostgreSQL. |
 | Telegram Bot | `GET /healthz` on the Bot port | `200 {"status":"ok"}` | Webhook HTTP process is running; the probe does not invoke Telegram handling. |
-| Central Dispatch runtime | Admin operational dashboard | current healthy session and ready tabs | The local authenticated browser session is available for scans. |
+| Central Dispatch runtime | local `GET /healthz` and `GET /readyz` | `200 {"status":"ok"}` and `200 {"status":"ready"}` | The worker is running and the local authenticated browser session is available for scans. |
 
 Use the API readiness endpoint for a load balancer or deployment readiness
 gate. Use liveness endpoints only to determine whether the process needs a
@@ -31,6 +31,11 @@ pnpm ops:probes
 The command checks API liveness and readiness plus Bot liveness, uses a
 five-second timeout by default, and prints only probe names, outcomes, and
 durations. It accepts only credential-free HTTP(S) URLs.
+
+The Central Dispatch worker also exposes loopback-only liveness and readiness
+on `127.0.0.1:3010` by default (`CENTRAL_DISPATCH_HEALTH_PORT` changes only the
+local port). A local monitoring agent may check those endpoints; do not expose
+this port publicly or proxy it through the Mini App API.
 
 ## Alert thresholds
 
