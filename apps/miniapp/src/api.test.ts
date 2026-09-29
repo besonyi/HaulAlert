@@ -67,11 +67,29 @@ test("Mini App API client pauses only the selected alert", async () => {
 
 test("Mini App API client surfaces a safe API failure", async () => {
   const client = new MiniAppApiClient("signed-init-data", "/api", async () => {
-    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "x-request-id": "a90d0a11-cfd9-49f2-a997-3d0a1f8b2c4d" }
+    });
   });
   await assert.rejects(() => client.listAlerts(), (error: unknown) => {
     assert.ok(error instanceof MiniAppApiError);
     assert.equal(error.statusCode, 401);
+    assert.equal(error.requestId, "a90d0a11-cfd9-49f2-a997-3d0a1f8b2c4d");
+    return true;
+  });
+});
+
+test("Mini App API client ignores an invalid correlation header", async () => {
+  const client = new MiniAppApiClient("signed-init-data", "/api", async () => {
+    return new Response(JSON.stringify({ error: "request_failed" }), {
+      status: 500,
+      headers: { "x-request-id": "untrusted-value" }
+    });
+  });
+  await assert.rejects(() => client.listAlerts(), (error: unknown) => {
+    assert.ok(error instanceof MiniAppApiError);
+    assert.equal(error.requestId, undefined);
     return true;
   });
 });

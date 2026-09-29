@@ -586,13 +586,18 @@ function shortLocation(location: { readonly city: string | null; readonly state:
 }
 
 function readableError(error: unknown): string {
-  if (error instanceof MiniAppApiError && error.statusCode === 401) return "Telegram session expired. Close and reopen HaulAlert.";
-  if (error instanceof MiniAppApiError && error.code === "plan_limit_reached") return "Your plan has reached its active-alert limit.";
-  if (error instanceof MiniAppApiError && error.code === "subscription_inactive") return "Your subscription is no longer active.";
-  if (error instanceof MiniAppApiError && error.code === "billing_unavailable") return "Billing is not available yet. Please try again later.";
-  if (error instanceof MiniAppApiError && error.code === "already_essential") return "Your Essential plan is already active.";
+  if (error instanceof MiniAppApiError && error.statusCode === 401) return withRequestReference(error, "Telegram session expired. Close and reopen HaulAlert.");
+  if (error instanceof MiniAppApiError && error.code === "plan_limit_reached") return withRequestReference(error, "Your plan has reached its active-alert limit.");
+  if (error instanceof MiniAppApiError && error.code === "subscription_inactive") return withRequestReference(error, "Your subscription is no longer active.");
+  if (error instanceof MiniAppApiError && error.code === "billing_unavailable") return withRequestReference(error, "Billing is not available yet. Please try again later.");
+  if (error instanceof MiniAppApiError && error.code === "already_essential") return withRequestReference(error, "Your Essential plan is already active.");
+  if (error instanceof MiniAppApiError) return withRequestReference(error, "Something went wrong. Please try again.");
   if (error instanceof Error) return error.message;
   return "Something went wrong. Please try again.";
+}
+
+function withRequestReference(error: MiniAppApiError, message: string): string {
+  return error.requestId === undefined ? message : `${message} Support reference: ${error.requestId}.`;
 }
 
 function escapeHtml(value: string): string {

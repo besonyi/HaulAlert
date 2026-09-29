@@ -65,7 +65,11 @@ export interface MiniAppReferralSummary {
 }
 
 export class MiniAppApiError extends Error {
-  public constructor(readonly statusCode: number, readonly code: string) {
+  public constructor(
+    readonly statusCode: number,
+    readonly code: string,
+    readonly requestId: string | undefined
+  ) {
     super(code);
   }
 }
@@ -147,8 +151,21 @@ export class MiniAppApiClient {
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({ error: "request_failed" })) as { error?: unknown };
-      throw new MiniAppApiError(response.status, typeof payload.error === "string" ? payload.error : "request_failed");
+      throw new MiniAppApiError(
+        response.status,
+        typeof payload.error === "string" ? payload.error : "request_failed",
+        requestIdFrom(response)
+      );
     }
     return response;
   }
+}
+
+function requestIdFrom(response: Response): string | undefined {
+  const requestId = response.headers.get("x-request-id");
+  return requestId !== null && isRequestId(requestId) ? requestId : undefined;
+}
+
+function isRequestId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
