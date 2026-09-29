@@ -31,8 +31,10 @@ HAULALERT_LOAD_TEST_NOTIFICATIONS=10000 \
 pnpm load:test
 ```
 
-Record the commit SHA, machine/runtime details, workload, and JSON result. Do
-not compare absolute milliseconds between different machines as an SLO.
+The JSON includes its execution timestamp, commit SHA when Git is available,
+Node version, platform, workload, and results. Record it with the release
+evidence; do not compare absolute milliseconds between different machines as
+an SLO.
 
 ## 2. Run a production-like exercise before beta expansion
 

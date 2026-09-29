@@ -1,4 +1,5 @@
 import { performance } from "node:perf_hooks";
+import { execFileSync } from "node:child_process";
 
 import { AlertCandidateIndex } from "../packages/alert-matcher/dist/index.js";
 import { ScanScheduler } from "../packages/browser-runtime-core/dist/scan-scheduler.js";
@@ -124,6 +125,12 @@ if (
 }
 
 console.log(JSON.stringify({
+  evidence: {
+    executedAt: new Date().toISOString(),
+    gitCommit: currentGitCommit(),
+    nodeVersion: process.version,
+    platform: `${process.platform}-${process.arch}`
+  },
   workload: { alertCount, loadCount, tabCount, notificationCount },
   results: {
     alertIndexBuildMilliseconds: round(buildMilliseconds),
@@ -154,4 +161,15 @@ function elapsed(startedAt) {
 
 function round(value) {
   return Math.round(value * 100) / 100;
+}
+
+function currentGitCommit() {
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch {
+    return null;
+  }
 }
