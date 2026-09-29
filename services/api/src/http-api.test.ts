@@ -222,7 +222,7 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
     dashboard: { getForUser: async () => ({ activeAlertCount: 0, loadsFoundLast24Hours: 0, recentNotifications: [] }) },
     adminDashboard: { getOverview: async () => ({ users: 3, activeAlerts: 2, loads: 5, sessions: [], tabs: [], deliveries: [], recovery: [] }) },
     adminSearch: { search: async (query) => ({ users: [{ telegramUserId: query }], alerts: [], loads: [], deliveries: [] }) },
-    partners: { approve: async (userId) => ({ userId, status: "active" }) },
+    partners: { approve: async (userId) => ({ userId, status: "active" }), setRiskLevel: async (userId, riskLevel) => ({ userId, riskLevel }) },
     audit: {
       record: async (event) => { auditEvents.push(event); },
       getRecent: async () => [{ id: "audit-1", action: "partner_approval_requested" }]
@@ -261,17 +261,23 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
     });
     assert.deepEqual(await (await fetch(`${baseUrl}/v1/admin/access`, { headers: { authorization: "tma admin-telegram-id" } })).json(), { role: "operator" });
     assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma customer" } })).status, 403);
+    assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/risk/high-risk`, { method: "POST", headers: { authorization: "tma customer" } })).status, 403);
     assert.deepEqual(auditEvents, []);
     assert.equal((await fetch(`${baseUrl}/v1/admin/beta-feedback/11111111-1111-4111-8111-111111111111/review`, { method: "POST", headers: { authorization: "tma customer" } })).status, 403);
     const reviewed = await fetch(`${baseUrl}/v1/admin/beta-feedback/11111111-1111-4111-8111-111111111111/review`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } });
     assert.equal(reviewed.status, 200);
     assert.deepEqual(await reviewed.json(), { feedback: { id: "11111111-1111-4111-8111-111111111111", message: "Helpful", userId, createdAt: "2026-09-29T00:00:00.000Z", reviewedAt: "2026-09-29T01:00:00.000Z" } });
     assert.deepEqual(auditEvents, [{ actorTelegramUserId: "admin-telegram-id", action: "beta_feedback_reviewed", subjectUserId: "11111111-1111-4111-8111-111111111111" }]);
+    const riskUpdated = await fetch(`${baseUrl}/v1/admin/partners/${userId}/risk/high-risk`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } });
+    assert.equal(riskUpdated.status, 200);
+    assert.equal((await riskUpdated.json() as { partner: { riskLevel: string } }).partner.riskLevel, "high_risk");
+    assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/risk/unsafe`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } })).status, 400);
     const approved = await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } });
     assert.equal(approved.status, 200);
     assert.equal((await approved.json() as { partner: { status: string } }).partner.status, "active");
     assert.deepEqual(auditEvents, [
       { actorTelegramUserId: "admin-telegram-id", action: "beta_feedback_reviewed", subjectUserId: "11111111-1111-4111-8111-111111111111" },
+      { actorTelegramUserId: "admin-telegram-id", action: "partner_risk_updated", subjectUserId: userId },
       { actorTelegramUserId: "admin-telegram-id", action: "partner_approval_requested", subjectUserId: userId }
     ]);
   } finally {

@@ -70,6 +70,9 @@ function renderOverview(overview: AdminSystemOverview): void {
   root.querySelectorAll<HTMLButtonElement>("[data-approve-partner]").forEach((button) => {
     button.addEventListener("click", () => { void approvePartner(button.dataset.approvePartner); });
   });
+  root.querySelectorAll<HTMLButtonElement>("[data-partner-risk]").forEach((button) => {
+    button.addEventListener("click", () => { void updatePartnerRisk(button.dataset.partnerRisk, button.dataset.partnerRiskLevel); });
+  });
   root.querySelectorAll<HTMLButtonElement>("[data-review-feedback]").forEach((button) => {
     button.addEventListener("click", () => { void reviewFeedback(button.dataset.reviewFeedback); });
   });
@@ -132,7 +135,7 @@ function simpleItem(title: string, detail?: string, action?: string): string {
 }
 
 function partnerApprovalMarkup(userId: string): string {
-  return adminRole === "operator" ? `<button class="partner-approve" type="button" data-approve-partner="${escapeHtml(userId)}">Approve partner</button>` : "";
+  return adminRole === "operator" ? `<div class="partner-controls"><button class="partner-approve" type="button" data-approve-partner="${escapeHtml(userId)}">Approve partner</button><button class="partner-risk" type="button" data-partner-risk="${escapeHtml(userId)}" data-partner-risk-level="trusted">Mark trusted · 14d</button><button class="partner-risk high-risk" type="button" data-partner-risk="${escapeHtml(userId)}" data-partner-risk-level="high-risk">High risk · 30d</button></div>` : "";
 }
 
 function searchGroup(title: string, rows: readonly string[]): string {
@@ -171,6 +174,20 @@ async function approvePartner(userId: string | undefined): Promise<void> {
     searchMessage = error instanceof AdminApiError && error.statusCode === 409
       ? "This partner is no longer awaiting approval."
       : "Partner approval could not be completed. Try again shortly.";
+  }
+  renderOverview(currentOverview);
+}
+
+async function updatePartnerRisk(userId: string | undefined, riskLevel: string | undefined): Promise<void> {
+  if (client === undefined || currentOverview === undefined || userId === undefined || adminRole !== "operator" || (riskLevel !== "trusted" && riskLevel !== "high-risk")) return;
+  try {
+    await client.setPartnerRisk(userId, riskLevel);
+    auditEvents = await client.getAuditEvents();
+    searchMessage = riskLevel === "trusted" ? "Partner marked trusted; future commissions use a 14-day hold." : "Partner marked high risk; future commissions use a 30-day hold.";
+  } catch (error: unknown) {
+    searchMessage = error instanceof AdminApiError && error.statusCode === 409
+      ? "This customer does not have an eligible partner account."
+      : "Partner risk update could not be completed. Try again shortly.";
   }
   renderOverview(currentOverview);
 }

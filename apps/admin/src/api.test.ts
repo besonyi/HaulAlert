@@ -71,7 +71,7 @@ test("admin client marks beta feedback reviewed with Telegram authorization", as
   assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
 });
 
-test("admin client reads its role and sends a protected partner approval", async () => {
+test("admin client reads its role and sends protected partner controls", async () => {
   const requests: Array<{ input: string; method: string | undefined }> = [];
   const client = new AdminApiClient("signed-init-data", "/api", async (input, init) => {
     requests.push({ input: String(input), method: init?.method });
@@ -79,8 +79,10 @@ test("admin client reads its role and sends a protected partner approval", async
   });
   assert.equal(await client.getAccess(), "operator");
   await client.approvePartner("11111111-1111-4111-8111-111111111111");
+  await client.setPartnerRisk("11111111-1111-4111-8111-111111111111", "high-risk");
   assert.deepEqual(requests, [
     { input: "/api/v1/admin/access", method: undefined },
-    { input: "/api/v1/admin/partners/11111111-1111-4111-8111-111111111111/approve", method: "POST" }
+    { input: "/api/v1/admin/partners/11111111-1111-4111-8111-111111111111/approve", method: "POST" },
+    { input: "/api/v1/admin/partners/11111111-1111-4111-8111-111111111111/risk/high-risk", method: "POST" }
   ]);
 });

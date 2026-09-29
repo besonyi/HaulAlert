@@ -68,7 +68,7 @@ database:
 3. Restore into the empty target using a deployment-scoped database user. Do
    not use `--clean` or target the production database during a rehearsal.
 4. Run the repository's migrations in lexical order through
-   `0016_partner_commission_charge_link.sql` only when the restored backup predates those
+   `0017_partner_risk_audit.sql` only when the restored backup predates those
    schema changes.
 5. Start API and worker processes against the isolated target, then verify API
    `/readyz`, Bot `/healthz`, and the Admin operational dashboard.

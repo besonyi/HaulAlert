@@ -2,11 +2,13 @@ import type { SqlExecutor } from "@haulalert/notification-service";
 
 export type PartnerStatus = "not_eligible" | "pending_approval" | "active" | "suspended" | "rejected" | "closed";
 export type PartnerRewardMode = "referral_credit" | "partner_commission";
+export type PartnerRiskLevel = "new" | "trusted" | "high_risk";
 
 export interface PartnerAccount {
   readonly status: PartnerStatus;
   readonly rewardMode: PartnerRewardMode;
   readonly commissionRateBasisPoints: number;
+  readonly riskLevel: PartnerRiskLevel;
   readonly holdDays: number;
   readonly partnerEligibleAt: string;
   readonly approvedAt: string | null;
@@ -18,7 +20,7 @@ export class PostgresPartnerAccountRepository {
 
   public async getForUser(userId: string): Promise<PartnerAccount | undefined> {
     const result = await this.database.query(
-      `SELECT status, reward_mode, commission_rate_basis_points, hold_days, partner_eligible_at, approved_at
+      `SELECT status, reward_mode, commission_rate_basis_points, risk_level, hold_days, partner_eligible_at, approved_at
       FROM partner_accounts WHERE user_id = $1::uuid`,
       [userId]
     );
@@ -30,8 +32,23 @@ export class PostgresPartnerAccountRepository {
       `UPDATE partner_accounts
       SET status = 'active', reward_mode = 'partner_commission', approved_at = now(), updated_at = now()
       WHERE user_id = $1::uuid AND status = 'pending_approval'
-      RETURNING status, reward_mode, commission_rate_basis_points, hold_days, partner_eligible_at, approved_at`,
+      RETURNING status, reward_mode, commission_rate_basis_points, risk_level, hold_days, partner_eligible_at, approved_at`,
       [userId]
+    );
+    return result.rows[0] === undefined ? undefined : account(result.rows[0]);
+  }
+
+  /** Changes the hold applied to future commissions; existing holds remain immutable. */
+  public async setRiskLevel(userId: string, riskLevel: PartnerRiskLevel): Promise<PartnerAccount | undefined> {
+    const result = await this.database.query(
+      `UPDATE partner_accounts
+      SET risk_level = $2,
+        hold_days = CASE $2 WHEN 'trusted' THEN 14 WHEN 'high_risk' THEN 30 ELSE 21 END,
+        trusted_at = CASE WHEN $2 = 'trusted' THEN COALESCE(trusted_at, now()) ELSE trusted_at END,
+        updated_at = now()
+      WHERE user_id = $1::uuid AND status IN ('pending_approval', 'active', 'suspended')
+      RETURNING status, reward_mode, commission_rate_basis_points, risk_level, hold_days, partner_eligible_at, approved_at`,
+      [userId, riskLevel]
     );
     return result.rows[0] === undefined ? undefined : account(result.rows[0]);
   }
@@ -48,10 +65,16 @@ function account(row: Record<string, unknown>): PartnerAccount {
     status,
     rewardMode,
     commissionRateBasisPoints: number(row.commission_rate_basis_points, "commission rate"),
+    riskLevel: riskLevel(row.risk_level),
     holdDays: number(row.hold_days, "hold days"),
     partnerEligibleAt: timestamp(row.partner_eligible_at, "partner eligibility"),
     approvedAt: row.approved_at === null || row.approved_at === undefined ? null : timestamp(row.approved_at, "partner approval")
   };
+}
+
+function riskLevel(value: unknown): PartnerRiskLevel {
+  if (value === "new" || value === "trusted" || value === "high_risk") return value;
+  throw new Error("Expected partner risk level");
 }
 
 function number(value: unknown, name: string): number {

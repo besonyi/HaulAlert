@@ -17,7 +17,7 @@ export { PostgresBrokerDirectoryRepository, normalizeBrokerQuery, type BrokerPro
 export { BetaFeedbackValidationError, PostgresBetaFeedbackRepository, normalizeBetaFeedbackMessage, type BetaFeedback, type BetaFeedbackInput, type BetaFeedbackReviewItem } from "./beta-feedback.js";
 export { InactiveSubscriptionError, PlanLimitExceededError, PostgresEntitlementRepository, type AccountEntitlement } from "./entitlements.js";
 export { PostgresReferralRepository, type ReferralSummary } from "./referrals.js";
-export { PostgresPartnerAccountRepository, type PartnerAccount, type PartnerRewardMode, type PartnerStatus } from "./partner-accounts.js";
+export { PostgresPartnerAccountRepository, type PartnerAccount, type PartnerRewardMode, type PartnerRiskLevel, type PartnerStatus } from "./partner-accounts.js";
 export { PostgresPartnerEarningsRepository, type PartnerEarningsSummary } from "./partner-earnings.js";
 export { PostgresPartnerCommissionReleaseRepository } from "./partner-commission-release.js";
 export {

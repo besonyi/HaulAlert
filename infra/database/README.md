@@ -21,6 +21,7 @@ psql "$DATABASE_URL" -f infra/database/migrations/0013_beta_feedback_review.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0014_admin_audit_feedback_review.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0015_partner_commissions.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0016_partner_commission_charge_link.sql
+psql "$DATABASE_URL" -f infra/database/migrations/0017_partner_risk_audit.sql
 ```
 
 The application must use four transactional patterns:

@@ -38,10 +38,11 @@ export interface MiniAppApiDependencies {
   };
   readonly partners?: {
     approve(userId: string): Promise<unknown | undefined>;
+    setRiskLevel?(userId: string, riskLevel: "new" | "trusted" | "high_risk"): Promise<unknown | undefined>;
     getEarnings?(userId: string): Promise<unknown | undefined>;
   };
   readonly audit?: {
-    record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested" | "beta_feedback_reviewed"; readonly subjectUserId: string }): Promise<void>;
+    record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested" | "partner_risk_updated" | "beta_feedback_reviewed"; readonly subjectUserId: string }): Promise<void>;
     getRecent?(): Promise<unknown>;
   };
   readonly billing?: {
@@ -172,6 +173,22 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       });
       const partner = await dependencies.partners.approve(partnerRoute.userId);
       return partner === undefined ? { statusCode: 409, body: { error: "partner_unavailable" } } : { statusCode: 200, body: { partner } };
+    }
+    const partnerRiskRoute = parseAdminPartnerRiskRoute(pathname);
+    if (partnerRiskRoute !== undefined && request.method === "POST") {
+      if (dependencies.partners?.setRiskLevel === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
+      if (roleFor(dependencies, user) !== "operator") return { statusCode: 403, body: { error: "forbidden" } };
+      if (!isUuid(partnerRiskRoute.userId)) return { statusCode: 400, body: { error: "invalid_user_id" } };
+      const riskLevel = partnerRiskLevel(partnerRiskRoute.riskLevel);
+      if (riskLevel === undefined) return { statusCode: 400, body: { error: "invalid_partner_risk" } };
+      const partner = await dependencies.partners.setRiskLevel(partnerRiskRoute.userId, riskLevel);
+      if (partner === undefined) return { statusCode: 409, body: { error: "partner_unavailable" } };
+      await dependencies.audit?.record({
+        actorTelegramUserId: user.telegramUserId ?? user.id,
+        action: "partner_risk_updated",
+        subjectUserId: partnerRiskRoute.userId
+      });
+      return { statusCode: 200, body: { partner } };
     }
     if (pathname === "/v1/brokers" && request.method === "GET") {
       if (dependencies.brokerDirectory === undefined) return { statusCode: 404, body: { error: "not_found" } };
@@ -309,6 +326,17 @@ function parseAdminPartnerRoute(pathname: string): { readonly userId: string } |
   return segments[0] === "v1" && segments[1] === "admin" && segments[2] === "partners" && segments[4] === "approve" && segments.length === 5 && segments[3] !== undefined
     ? { userId: segments[3] }
     : undefined;
+}
+
+function parseAdminPartnerRiskRoute(pathname: string): { readonly userId: string; readonly riskLevel: string } | undefined {
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+  return segments[0] === "v1" && segments[1] === "admin" && segments[2] === "partners" && segments[4] === "risk" && segments.length === 6 && segments[3] !== undefined && segments[5] !== undefined
+    ? { userId: segments[3], riskLevel: segments[5] }
+    : undefined;
+}
+
+function partnerRiskLevel(value: string): "new" | "trusted" | "high_risk" | undefined {
+  return value === "new" || value === "trusted" ? value : value === "high-risk" ? "high_risk" : undefined;
 }
 
 function parseAdminFeedbackReviewRoute(pathname: string): { readonly feedbackId: string } | undefined {
