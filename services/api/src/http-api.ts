@@ -18,7 +18,10 @@ const maximumRequestBodyBytes = 1_000_000;
 export interface MiniAppApiDependencies {
   readonly alerts: AlertManagementRepository;
   readonly dashboard: DashboardRepository;
-  readonly feedback?: { create(input: { readonly userId: string; readonly message: unknown }): Promise<unknown> };
+  readonly feedback?: {
+    create(input: { readonly userId: string; readonly message: unknown }): Promise<unknown>;
+    getRecent?(limit?: number): Promise<unknown>;
+  };
   /** Verifies dependencies needed to serve customer requests, without authenticating a customer. */
   readonly readiness?: { check(): Promise<void> };
   readonly adminDashboard?: { getOverview(): Promise<unknown> };
@@ -128,6 +131,12 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       if (dependencies.audit?.getRecent === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
       return roleFor(dependencies, user) !== undefined
         ? { statusCode: 200, body: { events: await dependencies.audit.getRecent() } }
+        : { statusCode: 403, body: { error: "forbidden" } };
+    }
+    if (pathname === "/v1/admin/beta-feedback" && request.method === "GET") {
+      if (dependencies.feedback?.getRecent === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
+      return roleFor(dependencies, user) !== undefined
+        ? { statusCode: 200, body: { feedback: await dependencies.feedback.getRecent() } }
         : { statusCode: 403, body: { error: "forbidden" } };
     }
     if (pathname === "/v1/admin/access" && request.method === "GET") {

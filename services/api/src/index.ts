@@ -14,7 +14,7 @@ export { PostgresAdminDashboardRepository, type AdminSystemOverview, type Operat
 export { PostgresAdminAuditRepository, type AdminAuditEvent, type AdminAuditEventInput } from "./admin-audit.js";
 export { PostgresAdminSearchRepository, normalizeAdminSearchQuery, type AdminSearchResults } from "./admin-search.js";
 export { PostgresBrokerDirectoryRepository, normalizeBrokerQuery, type BrokerProfile } from "./broker-directory.js";
-export { BetaFeedbackValidationError, PostgresBetaFeedbackRepository, normalizeBetaFeedbackMessage, type BetaFeedback, type BetaFeedbackInput } from "./beta-feedback.js";
+export { BetaFeedbackValidationError, PostgresBetaFeedbackRepository, normalizeBetaFeedbackMessage, type BetaFeedback, type BetaFeedbackInput, type BetaFeedbackReviewItem } from "./beta-feedback.js";
 export { InactiveSubscriptionError, PlanLimitExceededError, PostgresEntitlementRepository, type AccountEntitlement } from "./entitlements.js";
 export { PostgresReferralRepository, type ReferralSummary } from "./referrals.js";
 export { PostgresPartnerAccountRepository, type PartnerAccount, type PartnerRewardMode, type PartnerStatus } from "./partner-accounts.js";

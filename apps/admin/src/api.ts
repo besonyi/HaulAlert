@@ -36,6 +36,13 @@ export interface AdminAuditEvent {
   readonly createdAt: string;
 }
 
+export interface AdminBetaFeedback {
+  readonly id: string;
+  readonly userId: string;
+  readonly message: string;
+  readonly createdAt: string;
+}
+
 export type AdminRole = "viewer" | "operator";
 
 export class AdminApiError extends Error {
@@ -73,6 +80,14 @@ export class AdminApiClient {
     });
     if (!response.ok) throw await errorFrom(response);
     return (await response.json() as { events: AdminAuditEvent[] }).events;
+  }
+
+  public async getBetaFeedback(): Promise<readonly AdminBetaFeedback[]> {
+    const response = await this.request(`${this.baseUrl}/v1/admin/beta-feedback`, {
+      headers: { authorization: `tma ${this.initData}` }
+    });
+    if (!response.ok) throw await errorFrom(response);
+    return (await response.json() as { feedback: AdminBetaFeedback[] }).feedback;
   }
 
   public async getAccess(): Promise<AdminRole> {

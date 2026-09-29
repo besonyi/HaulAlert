@@ -1,4 +1,4 @@
-import { AdminApiClient, AdminApiError, type AdminAuditEvent, type AdminRole, type AdminSearchResults, type AdminSystemOverview, type OperationalCount, type OperationalRecoveryItem } from "./api.js";
+import { AdminApiClient, AdminApiError, type AdminAuditEvent, type AdminBetaFeedback, type AdminRole, type AdminSearchResults, type AdminSystemOverview, type OperationalCount, type OperationalRecoveryItem } from "./api.js";
 import { operationalStatus } from "./operational-status.js";
 
 interface TelegramWebApp {
@@ -22,6 +22,7 @@ telegram?.expand();
 const client = telegram?.initData === undefined ? undefined : new AdminApiClient(telegram.initData);
 let currentOverview: AdminSystemOverview | undefined;
 let auditEvents: readonly AdminAuditEvent[] = [];
+let betaFeedback: readonly AdminBetaFeedback[] = [];
 let adminRole: AdminRole | undefined;
 let searchResults: AdminSearchResults | undefined;
 let searchTerm = "";
@@ -35,7 +36,7 @@ async function refresh(): Promise<void> {
   }
   root.innerHTML = loadingMarkup();
   try {
-    [currentOverview, auditEvents, adminRole] = await Promise.all([client.getOverview(), client.getAuditEvents(), client.getAccess()]);
+    [currentOverview, auditEvents, betaFeedback, adminRole] = await Promise.all([client.getOverview(), client.getAuditEvents(), client.getBetaFeedback(), client.getAccess()]);
     renderOverview(currentOverview);
   } catch (error: unknown) {
     renderError(messageFor(error));
@@ -57,6 +58,7 @@ function renderOverview(overview: AdminSystemOverview): void {
       ${group("Delivery outcomes", overview.deliveries, "No delivery outcomes recorded.")}
     </section>
     ${recoveryMarkup(overview.recovery)}
+    ${feedbackMarkup(betaFeedback)}
     ${auditMarkup(auditEvents)}
     ${searchMarkup()}
     <p class="footnote">Operational counts are credential-free and refresh on demand.</p>
@@ -68,6 +70,11 @@ function renderOverview(overview: AdminSystemOverview): void {
   root.querySelectorAll<HTMLButtonElement>("[data-approve-partner]").forEach((button) => {
     button.addEventListener("click", () => { void approvePartner(button.dataset.approvePartner); });
   });
+}
+
+function feedbackMarkup(items: readonly AdminBetaFeedback[]): string {
+  if (items.length === 0) return `<section class="feedback"><h2>Beta feedback</h2><p>No beta feedback recorded yet.</p></section>`;
+  return `<section class="feedback"><h2>Beta feedback</h2><p>Customer text is visible only to allowlisted Admin users.</p><div class="feedback-list">${items.map((item) => `<article><strong>${escapeHtml(shortId(item.userId))}</strong><p>${escapeHtml(item.message)}</p><span>${escapeHtml(formatTime(item.createdAt))}</span></article>`).join("")}</div></section>`;
 }
 
 function auditMarkup(events: readonly AdminAuditEvent[]): string {

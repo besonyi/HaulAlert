@@ -10,6 +10,11 @@ export interface BetaFeedback {
   readonly createdAt: string;
 }
 
+export interface BetaFeedbackReviewItem extends BetaFeedback {
+  readonly userId: string;
+  readonly message: string;
+}
+
 /** Signals a customer-correctable feedback payload without exposing it in an API error. */
 export class BetaFeedbackValidationError extends Error {
   public readonly issues = [];
@@ -30,6 +35,19 @@ export class PostgresBetaFeedbackRepository {
     const row = result.rows[0];
     if (row === undefined) throw new Error("Expected beta feedback result");
     return { id: uuid(row.id), createdAt: timestamp(row.created_at) };
+  }
+
+  /** Returns a bounded, newest-first list only for the protected Admin workflow. */
+  public async getRecent(limit: number = 20): Promise<readonly BetaFeedbackReviewItem[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Beta feedback limit must be an integer between 1 and 100");
+    const result = await this.database.query(
+      `SELECT id, user_id, message, created_at
+      FROM beta_feedback
+      ORDER BY created_at DESC, id DESC
+      LIMIT $1`,
+      [limit]
+    );
+    return result.rows.map(reviewItem);
   }
 }
 
@@ -55,4 +73,10 @@ function timestamp(value: unknown): string {
   const date = value instanceof Date ? value : new Date(typeof value === "string" ? value : "");
   if (Number.isNaN(date.getTime())) throw new Error("Expected beta feedback timestamp");
   return date.toISOString();
+}
+
+function reviewItem(row: Record<string, unknown>): BetaFeedbackReviewItem {
+  const message = typeof row.message === "string" ? row.message : "";
+  if (message.length < 1 || message.length > 1200) throw new Error("Expected beta feedback message");
+  return { id: uuid(row.id), userId: uuid(row.user_id), message, createdAt: timestamp(row.created_at) };
 }
