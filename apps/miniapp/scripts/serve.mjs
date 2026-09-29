@@ -6,7 +6,7 @@ const miniAppPort = readPort(process.env.MINIAPP_PORT, 3002);
 const apiOrigin = process.env.MINIAPP_API_ORIGIN ?? "http://127.0.0.1:3001";
 const staticRoot = resolve("dist");
 const maximumRequestBodyBytes = 1_000_000;
-const apiRequestTimeoutMs = readPositiveInteger(process.env.MINIAPP_API_REQUEST_TIMEOUT_MS, 10_000, "MINIAPP_API_REQUEST_TIMEOUT_MS");
+const apiRequestTimeoutMs = readPositiveInteger(process.env.MINIAPP_API_REQUEST_TIMEOUT_MS, 15_000, "MINIAPP_API_REQUEST_TIMEOUT_MS");
 
 createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://localhost");

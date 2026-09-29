@@ -6,7 +6,7 @@ const adminPort = readPort(process.env.ADMIN_PORT, 3003);
 const apiOrigin = process.env.ADMIN_API_ORIGIN ?? "http://127.0.0.1:3001";
 const staticRoot = resolve("dist");
 const maximumRequestBodyBytes = 1_000_000;
-const apiRequestTimeoutMs = readPositiveInteger(process.env.ADMIN_API_REQUEST_TIMEOUT_MS, 10_000, "ADMIN_API_REQUEST_TIMEOUT_MS");
+const apiRequestTimeoutMs = readPositiveInteger(process.env.ADMIN_API_REQUEST_TIMEOUT_MS, 15_000, "ADMIN_API_REQUEST_TIMEOUT_MS");
 
 createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://localhost");
