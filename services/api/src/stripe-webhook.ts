@@ -15,6 +15,10 @@ export interface StripeSubscriptionEvent {
   readonly subscriptionStatus: StripeSubscriptionStatus | undefined;
   readonly planId: "free" | "essential" | undefined;
   readonly cancelAtPeriodEnd: boolean | undefined;
+  /** Present only for a paid USD invoice; prevents Checkout/invoice double credit. */
+  readonly invoiceId: string | undefined;
+  readonly paymentAmountCents: number | undefined;
+  readonly paymentCurrency: "usd" | undefined;
 }
 
 export type StripeWebhookDisposition = "processed" | "duplicate" | "ignored";
@@ -69,6 +73,7 @@ export function parseStripeSubscriptionEvent(payload: Buffer): StripeSubscriptio
   const subscriptionId = eventType === "customer.subscription.deleted" || eventType === "customer.subscription.updated"
     ? optionalStripeId(object.id, "sub_")
     : optionalStripeId(object.subscription, "sub_");
+  const paidInvoice = eventType === "invoice.paid" ? paidInvoiceDetails(object) : undefined;
   return {
     eventId: requiredEventId(event.id), eventType, userId, customerId, subscriptionId,
     paymentStatus: eventType === "invoice.paid" || (eventType === "checkout.session.completed" && object.payment_status === "paid") ? "paid" : eventType === "invoice.payment_failed" ? "failed"
@@ -77,7 +82,10 @@ export function parseStripeSubscriptionEvent(payload: Buffer): StripeSubscriptio
     planId: eventType === "invoice.paid" || (eventType === "checkout.session.completed" && object.payment_status === "paid") ? "essential"
       : eventType === "invoice.payment_failed" || eventType === "charge.refunded" || eventType === "charge.dispute.created" || eventType === "customer.subscription.deleted" ? "free" : undefined,
     cancelAtPeriodEnd: eventType === "customer.subscription.updated" && typeof object.cancel_at_period_end === "boolean" ? object.cancel_at_period_end
-      : eventType === "customer.subscription.deleted" ? false : undefined
+      : eventType === "customer.subscription.deleted" ? false : undefined,
+    invoiceId: paidInvoice?.invoiceId,
+    paymentAmountCents: paidInvoice?.amountCents,
+    paymentCurrency: paidInvoice?.currency
   };
 }
 
@@ -123,11 +131,32 @@ export class PostgresStripeWebhookEventProcessor implements StripeWebhookEventPr
           updated_at = now()
         FROM updated_subscription
         WHERE $8::boolean AND referrals.referred_user_id = updated_subscription.user_id AND referrals.status <> 'invalidated'
+        RETURNING referrals.id, referrals.referrer_user_id, referrals.referred_user_id
+      ), created_commission AS (
+        INSERT INTO partner_commissions (
+          partner_account_id, partner_user_id, referral_id, referred_user_id,
+          stripe_invoice_id, gross_amount_cents, commission_rate_basis_points,
+          commission_amount_cents, hold_until
+        )
+        SELECT partner_accounts.id, updated_referral.referrer_user_id, updated_referral.id, updated_referral.referred_user_id,
+          $11::text, $12::integer, partner_accounts.commission_rate_basis_points,
+          (($12::bigint * partner_accounts.commission_rate_basis_points) / 10000)::integer,
+          now() + (partner_accounts.hold_days * interval '1 day')
+        FROM updated_referral
+        INNER JOIN partner_accounts ON partner_accounts.user_id = updated_referral.referrer_user_id
+        WHERE $2::text = 'invoice.paid'
+          AND $11::text IS NOT NULL
+          AND $12::integer IS NOT NULL AND $12::integer > 0
+          AND $13::text = 'usd'
+          AND partner_accounts.status = 'active'
+          AND partner_accounts.reward_mode = 'partner_commission'
+        ON CONFLICT (stripe_invoice_id) DO NOTHING
       )
       SELECT (SELECT count(*) FROM matched_subscription) AS matched_count,
         (SELECT count(*) FROM inserted_event) AS inserted_count`,
       [event.eventId, event.eventType, event.userId ?? null, event.customerId ?? null, event.subscriptionId ?? null,
-        event.paymentStatus ?? null, event.subscriptionStatus ?? null, event.paymentStatus !== undefined || event.planId === "free", event.planId ?? null, event.cancelAtPeriodEnd ?? null]
+        event.paymentStatus ?? null, event.subscriptionStatus ?? null, event.paymentStatus !== undefined || event.planId === "free", event.planId ?? null, event.cancelAtPeriodEnd ?? null,
+        event.invoiceId ?? null, event.paymentAmountCents ?? null, event.paymentCurrency ?? null]
     );
     const row = result.rows[0];
     if (row === undefined) throw new Error("Expected Stripe webhook processing result");
@@ -180,6 +209,19 @@ function subscriptionMetadata(object: Record<string, unknown>): unknown {
 
 function optionalStripeId(value: unknown, prefix: string): string | undefined {
   return typeof value === "string" && value.startsWith(prefix) ? value : undefined;
+}
+
+function paidInvoiceDetails(object: Record<string, unknown>): { readonly invoiceId: string; readonly amountCents: number; readonly currency: "usd" } | undefined {
+  const invoiceId = optionalStripeId(object.id, "in_");
+  if (invoiceId === undefined) throw new InvalidStripeWebhookPayloadError();
+  const amountCents = amountInCents(object.amount_paid);
+  const currency = typeof object.currency === "string" ? object.currency.toLowerCase() : undefined;
+  if (amountCents === undefined || currency !== "usd") throw new InvalidStripeWebhookPayloadError();
+  return { invoiceId, amountCents, currency };
+}
+
+function amountInCents(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 2_000_000_000 ? value : undefined;
 }
 
 function requiredEventId(value: string): string {

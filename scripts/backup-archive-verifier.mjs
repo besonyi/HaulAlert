@@ -13,6 +13,7 @@ export const requiredBackupTables = [
   "subscriptions",
   "referrals",
   "partner_accounts",
+  "partner_commissions",
   "stripe_webhook_events",
   "admin_audit_events",
   "beta_feedback"

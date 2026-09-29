@@ -9,7 +9,7 @@ an incident ticket.
 
 The backup must include all HaulAlert application data: users, alerts, provider
 search definitions, normalized loads, scan history, notification deliveries and
-attempts, subscriptions, referral/partner records, Stripe webhook events, and
+attempts, subscriptions, referral/partner commission records, Stripe webhook events, and
 the operator audit trail, and controlled-beta feedback. It does not include Telegram bot tokens, webhook
 secrets, Stripe credentials, or Central Dispatch browser cookies; those are
 external secret-manager or local-browser concerns.
@@ -68,7 +68,7 @@ database:
 3. Restore into the empty target using a deployment-scoped database user. Do
    not use `--clean` or target the production database during a rehearsal.
 4. Run the repository's migrations in lexical order through
-   `0014_admin_audit_feedback_review.sql` only when the restored backup predates those
+   `0015_partner_commissions.sql` only when the restored backup predates those
    schema changes.
 5. Start API and worker processes against the isolated target, then verify API
    `/readyz`, Bot `/healthz`, and the Admin operational dashboard.
