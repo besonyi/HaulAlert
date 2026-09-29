@@ -9,6 +9,7 @@ const maximumRequestBodyBytes = 1_000_000;
 const apiRequestTimeoutMs = readPositiveInteger(process.env.ADMIN_API_REQUEST_TIMEOUT_MS, 15_000, "ADMIN_API_REQUEST_TIMEOUT_MS");
 
 createServer(async (request, response) => {
+  setSecurityHeaders(response);
   const url = new URL(request.url ?? "/", "http://localhost");
   try {
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
@@ -23,6 +24,13 @@ createServer(async (request, response) => {
 }).listen(adminPort, () => {
   console.info(`HaulAlert Admin listening on http://127.0.0.1:${adminPort}`);
 });
+
+function setSecurityHeaders(response) {
+  response.setHeader("content-security-policy", "default-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'; script-src 'self' https://telegram.org; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'");
+  response.setHeader("referrer-policy", "no-referrer");
+  response.setHeader("x-content-type-options", "nosniff");
+  response.setHeader("x-permitted-cross-domain-policies", "none");
+}
 
 async function serveStatic(response, pathname) {
   const relativePath = pathname === "/" ? "index.html" : pathname.slice(1);
