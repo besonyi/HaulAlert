@@ -37,6 +37,7 @@ export interface CentralDispatchWorkerRuntimeConfig {
   readonly batchSize: number;
   readonly pollIntervalMs: number;
   readonly alertRefreshIntervalMs: number;
+  readonly requestTimeoutMs: number;
 }
 
 /** Reads the non-secret configuration for the Central Dispatch runtime process. */
@@ -61,6 +62,11 @@ export function getCentralDispatchWorkerRuntimeConfig(
       environment.CENTRAL_DISPATCH_ALERT_REFRESH_INTERVAL_MS,
       5_000,
       "CENTRAL_DISPATCH_ALERT_REFRESH_INTERVAL_MS"
+    ),
+    requestTimeoutMs: getPositiveInteger(
+      environment.CENTRAL_DISPATCH_REQUEST_TIMEOUT_MS,
+      15_000,
+      "CENTRAL_DISPATCH_REQUEST_TIMEOUT_MS"
     )
   };
 }
@@ -77,8 +83,11 @@ export async function runCentralDispatchWorker(
     const durableRuntime = new DurableBrowserRuntimeController(runtime, stateStore);
     await durableRuntime.restore();
 
-    const chromeRuntime = new LocalChromeDevToolsRuntime(config.chromeDevToolsEndpoint);
-    const gateway = createLocalCentralDispatchCdpSearchGateway(config.chromeDevToolsEndpoint);
+    const chromeRuntime = new LocalChromeDevToolsRuntime(config.chromeDevToolsEndpoint, config.requestTimeoutMs);
+    const gateway = createLocalCentralDispatchCdpSearchGateway(
+      config.chromeDevToolsEndpoint,
+      config.requestTimeoutMs
+    );
     const orchestrator = new BrowserRuntimeOrchestrator(runtime, gateway);
     const synchronizer = new CentralDispatchSearchSynchronizer(
       new PostgresProviderSearchSource(database),

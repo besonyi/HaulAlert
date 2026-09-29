@@ -9,7 +9,7 @@ import { getCentralDispatchWorkerRuntimeConfig } from "./central-dispatch-worker
 export async function runCentralDispatchReadinessCheck(): Promise<void> {
   const config = getCentralDispatchWorkerRuntimeConfig();
   const result = await checkCentralDispatchReadiness(
-    new LocalChromeDevToolsRuntime(config.chromeDevToolsEndpoint)
+    new LocalChromeDevToolsRuntime(config.chromeDevToolsEndpoint, config.requestTimeoutMs)
   );
   if (result.status === "ready") {
     console.info("Central Dispatch readiness check passed: authenticated page detected through local Chrome.");

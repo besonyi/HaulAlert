@@ -32,6 +32,7 @@ export {
 } from "./central-dispatch-open-search-transport.js";
 export {
   CentralDispatchCdpRequestExecutor,
+  CentralDispatchRequestTimeoutError,
   CentralDispatchTabNotFoundError,
   LocalChromeDevToolsRuntime,
   createCentralDispatchCdpSessionClient,
@@ -330,11 +331,14 @@ export function createCentralDispatchCdpSearchGateway(
 }
 
 /** Uses the local Chrome DevTools endpoint for the Central Dispatch-only gateway. */
-export function createLocalCentralDispatchCdpSearchGateway(endpoint?: string): SessionSearchGateway {
+export function createLocalCentralDispatchCdpSearchGateway(
+  endpoint?: string,
+  requestTimeoutMs?: number
+): SessionSearchGateway {
   return new SessionSearchGateway([
     new NormalizingSessionProviderAdapter(
       "central-dispatch",
-      createLocalCentralDispatchCdpSessionClient(endpoint),
+      createLocalCentralDispatchCdpSessionClient(endpoint, requestTimeoutMs),
       normalizeCentralDispatchSearchResponse
     )
   ]);

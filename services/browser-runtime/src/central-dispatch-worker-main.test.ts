@@ -11,6 +11,7 @@ describe("Central Dispatch worker runtime config", () => {
     assert.equal(config.chromeDevToolsEndpoint, "http://127.0.0.1:9222");
     assert.equal(config.batchSize, 10);
     assert.equal(config.pollIntervalMs, 30_000);
+    assert.equal(config.requestTimeoutMs, 15_000);
   });
 
   it("reads validated polling settings without reading browser credentials", () => {
@@ -20,7 +21,8 @@ describe("Central Dispatch worker runtime config", () => {
       CENTRAL_DISPATCH_DEVTOOLS_ENDPOINT: "http://127.0.0.1:9333",
       CENTRAL_DISPATCH_BATCH_SIZE: "3",
       CENTRAL_DISPATCH_POLL_INTERVAL_MS: "45000",
-      CENTRAL_DISPATCH_ALERT_REFRESH_INTERVAL_MS: "9000"
+      CENTRAL_DISPATCH_ALERT_REFRESH_INTERVAL_MS: "9000",
+      CENTRAL_DISPATCH_REQUEST_TIMEOUT_MS: "12000"
     });
 
     assert.equal(config.sessionId, "office-chrome");
@@ -28,6 +30,7 @@ describe("Central Dispatch worker runtime config", () => {
     assert.equal(config.batchSize, 3);
     assert.equal(config.pollIntervalMs, 45_000);
     assert.equal(config.alertRefreshIntervalMs, 9_000);
+    assert.equal(config.requestTimeoutMs, 12_000);
   });
 
   it("rejects unsafe polling values", () => {

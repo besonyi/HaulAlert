@@ -5,6 +5,7 @@ import { CentralDispatchOpenSearchTransport } from "./central-dispatch-open-sear
 import { CentralDispatchSessionClient } from "./central-dispatch-session-client.js";
 
 const centralDispatchHost = "app.centraldispatch.com";
+const defaultRequestTimeoutMs = 15_000;
 
 export interface ChromeDevToolsTarget {
   readonly id: string;
@@ -26,32 +27,52 @@ export class CentralDispatchTabNotFoundError extends Error {
   }
 }
 
+/** Raised when the local browser or the provider page does not answer in time. */
+export class CentralDispatchRequestTimeoutError extends Error {
+  public constructor(readonly timeoutMs: number) {
+    super(`Central Dispatch request timed out after ${timeoutMs}ms`);
+    this.name = "CentralDispatchRequestTimeoutError";
+  }
+}
+
 /**
  * Runs an Open Search request in the existing Central Dispatch page context.
  * `credentials: include` is evaluated inside Chrome, so HaulAlert never reads,
  * serializes, or stores browser cookies.
  */
 export class CentralDispatchCdpRequestExecutor implements AuthenticatedCentralDispatchRequestExecutor {
-  public constructor(private readonly runtime: ChromeDevToolsRuntime) {}
+  public constructor(
+    private readonly runtime: ChromeDevToolsRuntime,
+    private readonly requestTimeoutMs: number = defaultRequestTimeoutMs
+  ) {
+    assertRequestTimeout(requestTimeoutMs);
+  }
 
   public async execute(request: CentralDispatchOpenSearchRequest): Promise<unknown> {
-    const target = await this.runtime.findCentralDispatchTarget();
-    return this.runtime.evaluateJson(target, toFetchExpression(request));
+    const target = await withTimeout(this.runtime.findCentralDispatchTarget(), this.requestTimeoutMs);
+    return withTimeout(this.runtime.evaluateJson(target, toFetchExpression(request, this.requestTimeoutMs)), this.requestTimeoutMs);
   }
 }
 
 /** Composes the Central Dispatch CDP bridge into the shared session-client contract. */
 export function createCentralDispatchCdpSessionClient(
-  runtime: ChromeDevToolsRuntime
+  runtime: ChromeDevToolsRuntime,
+  requestTimeoutMs?: number
 ): CentralDispatchSessionClient {
   return new CentralDispatchSessionClient(
-    new CentralDispatchOpenSearchTransport(new CentralDispatchCdpRequestExecutor(runtime))
+    new CentralDispatchOpenSearchTransport(new CentralDispatchCdpRequestExecutor(runtime, requestTimeoutMs))
   );
 }
 
 /** Uses Chrome's local DevTools endpoint, which defaults to 127.0.0.1:9222. */
-export function createLocalCentralDispatchCdpSessionClient(endpoint?: string): CentralDispatchSessionClient {
-  return createCentralDispatchCdpSessionClient(new LocalChromeDevToolsRuntime(endpoint));
+export function createLocalCentralDispatchCdpSessionClient(
+  endpoint?: string,
+  requestTimeoutMs?: number
+): CentralDispatchSessionClient {
+  return createCentralDispatchCdpSessionClient(
+    new LocalChromeDevToolsRuntime(endpoint, requestTimeoutMs),
+    requestTimeoutMs
+  );
 }
 
 /**
@@ -62,13 +83,27 @@ export function createLocalCentralDispatchCdpSessionClient(endpoint?: string): C
 export class LocalChromeDevToolsRuntime implements ChromeDevToolsRuntime {
   private readonly endpoint: URL;
 
-  public constructor(endpoint = "http://127.0.0.1:9222") {
+  public constructor(
+    endpoint = "http://127.0.0.1:9222",
+    private readonly requestTimeoutMs: number = defaultRequestTimeoutMs
+  ) {
     this.endpoint = new URL(endpoint);
     assertLoopbackEndpoint(this.endpoint);
+    assertRequestTimeout(requestTimeoutMs);
   }
 
   public async findCentralDispatchTarget(): Promise<ChromeDevToolsTarget> {
-    const response = await fetch(new URL("/json/list", this.endpoint));
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), this.requestTimeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(new URL("/json/list", this.endpoint), { signal: abortController.signal });
+    } catch (error: unknown) {
+      if (abortController.signal.aborted) throw new CentralDispatchRequestTimeoutError(this.requestTimeoutMs);
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!response.ok) {
       throw new Error(`Chrome DevTools target listing returned HTTP ${response.status}`);
     }
@@ -82,12 +117,12 @@ export class LocalChromeDevToolsRuntime implements ChromeDevToolsRuntime {
   public async evaluateJson(target: ChromeDevToolsTarget, expression: string): Promise<unknown> {
     const socket = new WebSocket(target.webSocketDebuggerUrl);
     try {
-      await waitForSocketOpen(socket);
+      await waitForSocketOpen(socket, this.requestTimeoutMs);
       const response = await sendChromeCommand(socket, {
         id: 1,
         method: "Runtime.evaluate",
         params: { expression, awaitPromise: true, returnByValue: true }
-      });
+      }, this.requestTimeoutMs);
       const failure = asRecord(response.error);
       if (failure !== undefined) {
         throw new Error(`Chrome DevTools evaluation failed: ${stringValue(failure.message) ?? "unknown error"}`);
@@ -106,21 +141,22 @@ export class LocalChromeDevToolsRuntime implements ChromeDevToolsRuntime {
   }
 }
 
-function toFetchExpression(request: CentralDispatchOpenSearchRequest): string {
+function toFetchExpression(request: CentralDispatchOpenSearchRequest, requestTimeoutMs: number): string {
   const url = JSON.stringify(request.url);
   const body = JSON.stringify(JSON.stringify(request.body));
   return [
-    "fetch(", url, ", {",
+    "(() => { const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), ", String(requestTimeoutMs), "); return fetch(", url, ", {",
     "method: 'POST',",
     "headers: { accept: 'application/json', 'content-type': 'application/json' },",
     "credentials: 'include',",
+    "signal: controller.signal,",
     "body: ", body,
     "}).then(async (response) => {",
     "const text = await response.text();",
     "if (!response.ok) throw new Error(`Central Dispatch returned HTTP ${response.status}`);",
     "JSON.parse(text);",
     "return text;",
-    "})"
+    "}).finally(() => clearTimeout(timeout)); })()"
   ].join("");
 }
 
@@ -153,27 +189,54 @@ function parseTarget(value: unknown): ChromeDevToolsTarget[] {
     : [{ id, type, url, webSocketDebuggerUrl }];
 }
 
-function waitForSocketOpen(socket: WebSocket): Promise<void> {
+function waitForSocketOpen(socket: WebSocket, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    socket.addEventListener("open", () => resolve(), { once: true });
-    socket.addEventListener("error", () => reject(new Error("Could not connect to Chrome DevTools")), { once: true });
+    const timeout = setTimeout(() => reject(new CentralDispatchRequestTimeoutError(timeoutMs)), timeoutMs);
+    socket.addEventListener("open", () => { clearTimeout(timeout); resolve(); }, { once: true });
+    socket.addEventListener("error", () => { clearTimeout(timeout); reject(new Error("Could not connect to Chrome DevTools")); }, { once: true });
   });
 }
 
-function sendChromeCommand(socket: WebSocket, command: Record<string, unknown>): Promise<Record<string, unknown>> {
+function sendChromeCommand(
+  socket: WebSocket,
+  command: Record<string, unknown>,
+  timeoutMs: number
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new CentralDispatchRequestTimeoutError(timeoutMs)), timeoutMs);
     socket.addEventListener("message", (event) => {
       try {
         const message = JSON.parse(String(event.data)) as unknown;
         const record = asRecord(message);
-        if (record !== undefined && record.id === command.id) resolve(record);
+        if (record !== undefined && record.id === command.id) { clearTimeout(timeout); resolve(record); }
       } catch (error) {
+        clearTimeout(timeout);
         reject(error);
       }
     });
-    socket.addEventListener("error", () => reject(new Error("Chrome DevTools command failed")), { once: true });
+    socket.addEventListener("error", () => { clearTimeout(timeout); reject(new Error("Chrome DevTools command failed")); }, { once: true });
     socket.send(JSON.stringify(command));
   });
+}
+
+function assertRequestTimeout(value: number): void {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error("Central Dispatch request timeout must be a positive integer");
+  }
+}
+
+async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new CentralDispatchRequestTimeoutError(timeoutMs)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

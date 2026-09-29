@@ -5,6 +5,7 @@ import { createSourceFilterHash } from "@haulalert/filter-compiler";
 
 import {
   CentralDispatchCdpRequestExecutor,
+  CentralDispatchRequestTimeoutError,
   createCentralDispatchCdpSessionClient,
   type ChromeDevToolsRuntime,
   type ChromeDevToolsTarget
@@ -54,7 +55,37 @@ describe("Central Dispatch CDP request executor", () => {
     assert.deepEqual(payload, { items: [{ id: "central-1" }] });
     assert.match(expression, /credentials: 'include'/);
     assert.match(expression, /listing-search\/api\/open-search/);
+    assert.match(expression, /AbortController/);
     assert.doesNotMatch(expression, /cookie/i);
+  });
+
+  it("bounds a stalled local browser request", async () => {
+    const executor = new CentralDispatchCdpRequestExecutor({
+      findCentralDispatchTarget: async () => await new Promise<ChromeDevToolsTarget>(() => undefined),
+      evaluateJson: async () => ({})
+    }, 1);
+
+    await assert.rejects(
+      () => executor.execute({
+        method: "POST",
+        url: "https://bff.centraldispatch.com/listing-search/api/open-search",
+        body: {
+          vehicleCount: { min: 1, max: null },
+          trailerTypes: ["OPEN"],
+          readyToShipWithinDays: null,
+          minimumPaymentTotal: null,
+          minimumPricePerMile: null,
+          offset: 0,
+          limit: 250,
+          sortFields: [{ name: "POSTDATE", direction: "DESC" }],
+          shipperIds: [],
+          marketplaceIds: [],
+          requestType: "Open",
+          locations: []
+        }
+      }),
+      (error: unknown) => error instanceof CentralDispatchRequestTimeoutError && error.timeoutMs === 1
+    );
   });
 
   it("composes the local browser bridge into the shared session client", async () => {
