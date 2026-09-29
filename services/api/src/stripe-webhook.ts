@@ -19,6 +19,8 @@ export interface StripeSubscriptionEvent {
   readonly invoiceId: string | undefined;
   readonly paymentAmountCents: number | undefined;
   readonly paymentCurrency: "usd" | undefined;
+  /** Links paid invoices and later refund/dispute events without exposing it to customers. */
+  readonly chargeId: string | undefined;
 }
 
 export type StripeWebhookDisposition = "processed" | "duplicate" | "ignored";
@@ -74,6 +76,9 @@ export function parseStripeSubscriptionEvent(payload: Buffer): StripeSubscriptio
     ? optionalStripeId(object.id, "sub_")
     : optionalStripeId(object.subscription, "sub_");
   const paidInvoice = eventType === "invoice.paid" ? paidInvoiceDetails(object) : undefined;
+  const chargeId = eventType === "invoice.paid" || eventType === "charge.refunded"
+    ? optionalStripeId(eventType === "charge.refunded" ? object.id : object.charge, "ch_")
+    : eventType === "charge.dispute.created" ? optionalStripeId(object.charge, "ch_") : undefined;
   return {
     eventId: requiredEventId(event.id), eventType, userId, customerId, subscriptionId,
     paymentStatus: eventType === "invoice.paid" || (eventType === "checkout.session.completed" && object.payment_status === "paid") ? "paid" : eventType === "invoice.payment_failed" ? "failed"
@@ -85,7 +90,8 @@ export function parseStripeSubscriptionEvent(payload: Buffer): StripeSubscriptio
       : eventType === "customer.subscription.deleted" ? false : undefined,
     invoiceId: paidInvoice?.invoiceId,
     paymentAmountCents: paidInvoice?.amountCents,
-    paymentCurrency: paidInvoice?.currency
+    paymentCurrency: paidInvoice?.currency,
+    chargeId
   };
 }
 
@@ -135,11 +141,11 @@ export class PostgresStripeWebhookEventProcessor implements StripeWebhookEventPr
       ), created_commission AS (
         INSERT INTO partner_commissions (
           partner_account_id, partner_user_id, referral_id, referred_user_id,
-          stripe_invoice_id, gross_amount_cents, commission_rate_basis_points,
+          stripe_invoice_id, stripe_charge_id, gross_amount_cents, commission_rate_basis_points,
           commission_amount_cents, hold_until
         )
         SELECT partner_accounts.id, updated_referral.referrer_user_id, updated_referral.id, updated_referral.referred_user_id,
-          $11::text, $12::integer, partner_accounts.commission_rate_basis_points,
+          $11::text, $14::text, $12::integer, partner_accounts.commission_rate_basis_points,
           (($12::bigint * partner_accounts.commission_rate_basis_points) / 10000)::integer,
           now() + (partner_accounts.hold_days * interval '1 day')
         FROM updated_referral
@@ -148,15 +154,27 @@ export class PostgresStripeWebhookEventProcessor implements StripeWebhookEventPr
           AND $11::text IS NOT NULL
           AND $12::integer IS NOT NULL AND $12::integer > 0
           AND $13::text = 'usd'
+          AND $14::text IS NOT NULL
           AND partner_accounts.status = 'active'
           AND partner_accounts.reward_mode = 'partner_commission'
         ON CONFLICT (stripe_invoice_id) DO NOTHING
+      ), reversed_commission AS (
+        UPDATE partner_commissions
+        SET status = CASE WHEN partner_commissions.status = 'pending' THEN 'cancelled' ELSE 'reversed' END,
+          cancelled_at = CASE WHEN partner_commissions.status = 'pending' THEN now() ELSE partner_commissions.cancelled_at END,
+          reversed_at = CASE WHEN partner_commissions.status = 'available' THEN now() ELSE partner_commissions.reversed_at END,
+          updated_at = now()
+        FROM updated_subscription
+        WHERE $2::text IN ('charge.refunded', 'charge.dispute.created')
+          AND $14::text IS NOT NULL
+          AND partner_commissions.stripe_charge_id = $14::text
+          AND partner_commissions.status IN ('pending', 'available')
       )
       SELECT (SELECT count(*) FROM matched_subscription) AS matched_count,
         (SELECT count(*) FROM inserted_event) AS inserted_count`,
       [event.eventId, event.eventType, event.userId ?? null, event.customerId ?? null, event.subscriptionId ?? null,
         event.paymentStatus ?? null, event.subscriptionStatus ?? null, event.paymentStatus !== undefined || event.planId === "free", event.planId ?? null, event.cancelAtPeriodEnd ?? null,
-        event.invoiceId ?? null, event.paymentAmountCents ?? null, event.paymentCurrency ?? null]
+        event.invoiceId ?? null, event.paymentAmountCents ?? null, event.paymentCurrency ?? null, event.chargeId ?? null]
     );
     const row = result.rows[0];
     if (row === undefined) throw new Error("Expected Stripe webhook processing result");
