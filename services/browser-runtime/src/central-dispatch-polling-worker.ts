@@ -8,9 +8,20 @@ export interface CentralDispatchPollingWorkerOptions {
   readonly batchSize?: number;
   /** Delay between scheduled cycles. Must be a positive integer. */
   readonly pollIntervalMs?: number;
+  /** Consecutive failed cycles allowed before provider calls are paused. */
+  readonly circuitBreakerFailureThreshold?: number;
+  /** Duration to pause provider calls after the circuit opens. */
+  readonly circuitBreakerCooldownMs?: number;
   readonly clock?: () => Date;
   readonly onCycleError?: (error: Error) => void;
+  readonly onCircuitOpen?: (retryAt: Date) => void;
   readonly onCycleComplete?: (result: CentralDispatchRuntimeCycleResult) => void;
+}
+
+export class CentralDispatchCircuitOpenError extends Error {
+  public constructor(readonly retryAt: Date) {
+    super("Central Dispatch circuit is open");
+  }
 }
 
 /**
@@ -21,10 +32,15 @@ export interface CentralDispatchPollingWorkerOptions {
 export class CentralDispatchPollingWorker {
   private readonly batchSize: number;
   private readonly pollIntervalMs: number;
+  private readonly circuitBreakerFailureThreshold: number;
+  private readonly circuitBreakerCooldownMs: number;
   private readonly clock: () => Date;
   private readonly onCycleError: (error: Error) => void;
+  private readonly onCircuitOpen: (retryAt: Date) => void;
   private readonly onCycleComplete: (result: CentralDispatchRuntimeCycleResult) => void;
   private activeCycle: Promise<CentralDispatchRuntimeCycleResult> | undefined;
+  private consecutiveFailures = 0;
+  private circuitOpenUntil: Date | undefined;
 
   public constructor(
     private readonly cycle: CentralDispatchRuntimeCycleRunner,
@@ -32,23 +48,43 @@ export class CentralDispatchPollingWorker {
   ) {
     this.batchSize = getPositiveInteger(options.batchSize, 1, "batchSize");
     this.pollIntervalMs = getPositiveInteger(options.pollIntervalMs, 30_000, "pollIntervalMs");
+    this.circuitBreakerFailureThreshold = getPositiveInteger(
+      options.circuitBreakerFailureThreshold,
+      3,
+      "circuitBreakerFailureThreshold"
+    );
+    this.circuitBreakerCooldownMs = getPositiveInteger(
+      options.circuitBreakerCooldownMs,
+      60_000,
+      "circuitBreakerCooldownMs"
+    );
     this.clock = options.clock ?? (() => new Date());
     this.onCycleError = options.onCycleError ?? (() => undefined);
+    this.onCircuitOpen = options.onCircuitOpen ?? (() => undefined);
     this.onCycleComplete = options.onCycleComplete ?? (() => undefined);
   }
 
   /** Executes one cycle, or joins an already-running cycle. */
   public processOnce(now: Date = this.clock()): Promise<CentralDispatchRuntimeCycleResult> {
     if (this.activeCycle !== undefined) return this.activeCycle;
+    if (this.circuitOpenUntil !== undefined && now < this.circuitOpenUntil) {
+      return Promise.reject(new CentralDispatchCircuitOpenError(this.circuitOpenUntil));
+    }
 
     const cycle = this.cycle.processDue(this.batchSize, now)
       .then((result) => {
+        this.consecutiveFailures = 0;
+        this.circuitOpenUntil = undefined;
         try {
           this.onCycleComplete(result);
         } catch (cause) {
           this.onCycleError(toError(cause));
         }
         return result;
+      })
+      .catch((cause: unknown) => {
+        this.recordFailure(now);
+        throw cause;
       });
     this.activeCycle = cycle.finally(() => {
       this.activeCycle = undefined;
@@ -63,6 +99,7 @@ export class CentralDispatchPollingWorker {
       try {
         await this.processOnce();
       } catch (cause) {
+        if (cause instanceof CentralDispatchCircuitOpenError) return;
         this.onCycleError(toError(cause));
       }
     };
@@ -84,6 +121,14 @@ export class CentralDispatchPollingWorker {
     } finally {
       if (timer !== undefined) clearInterval(timer);
     }
+  }
+
+  private recordFailure(now: Date): void {
+    this.consecutiveFailures += 1;
+    if (this.consecutiveFailures < this.circuitBreakerFailureThreshold) return;
+    const retryAt = new Date(now.getTime() + this.circuitBreakerCooldownMs);
+    this.circuitOpenUntil = retryAt;
+    this.onCircuitOpen(retryAt);
   }
 }
 

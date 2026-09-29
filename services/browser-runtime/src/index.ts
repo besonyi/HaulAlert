@@ -51,6 +51,7 @@ export {
   type CentralDispatchRuntimeCycleOptions
 } from "./central-dispatch-runtime-cycle.js";
 export {
+  CentralDispatchCircuitOpenError,
   CentralDispatchPollingWorker,
   type CentralDispatchPollingWorkerOptions
 } from "./central-dispatch-polling-worker.js";

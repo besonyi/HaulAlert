@@ -36,6 +36,8 @@ export interface CentralDispatchWorkerRuntimeConfig {
   readonly chromeDevToolsEndpoint: string;
   readonly batchSize: number;
   readonly pollIntervalMs: number;
+  readonly circuitBreakerFailureThreshold: number;
+  readonly circuitBreakerCooldownMs: number;
   readonly alertRefreshIntervalMs: number;
   readonly requestTimeoutMs: number;
 }
@@ -57,6 +59,16 @@ export function getCentralDispatchWorkerRuntimeConfig(
       environment.CENTRAL_DISPATCH_POLL_INTERVAL_MS,
       30_000,
       "CENTRAL_DISPATCH_POLL_INTERVAL_MS"
+    ),
+    circuitBreakerFailureThreshold: getPositiveInteger(
+      environment.CENTRAL_DISPATCH_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
+      3,
+      "CENTRAL_DISPATCH_CIRCUIT_BREAKER_FAILURE_THRESHOLD"
+    ),
+    circuitBreakerCooldownMs: getPositiveInteger(
+      environment.CENTRAL_DISPATCH_CIRCUIT_BREAKER_COOLDOWN_MS,
+      60_000,
+      "CENTRAL_DISPATCH_CIRCUIT_BREAKER_COOLDOWN_MS"
     ),
     alertRefreshIntervalMs: getPositiveInteger(
       environment.CENTRAL_DISPATCH_ALERT_REFRESH_INTERVAL_MS,
@@ -123,6 +135,9 @@ export async function runCentralDispatchWorker(
     await new CentralDispatchPollingWorker(cycle, {
       batchSize: config.batchSize,
       pollIntervalMs: config.pollIntervalMs,
+      circuitBreakerFailureThreshold: config.circuitBreakerFailureThreshold,
+      circuitBreakerCooldownMs: config.circuitBreakerCooldownMs,
+      onCircuitOpen: (retryAt) => console.warn(`Central Dispatch circuit opened; next provider attempt at ${retryAt.toISOString()}.`),
       onCycleComplete: (result) => {
         healthReporter.report(result);
         tabReporter.report();
