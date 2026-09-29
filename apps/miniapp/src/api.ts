@@ -64,6 +64,16 @@ export interface MiniAppReferralSummary {
   readonly partnerStatus: "not_eligible" | "pending_approval" | "active" | "suspended" | "rejected" | "closed";
 }
 
+export interface MiniAppPartnerEarnings {
+  readonly status: "not_eligible" | "pending_approval" | "active" | "suspended" | "rejected" | "closed";
+  readonly commissionRateBasisPoints: number;
+  readonly holdDays: number;
+  readonly pendingCents: number;
+  readonly availableCents: number;
+  readonly lifetimeEarnedCents: number;
+  readonly nextAvailableAt: string | null;
+}
+
 export class MiniAppApiError extends Error {
   public constructor(
     readonly statusCode: number,
@@ -114,6 +124,11 @@ export class MiniAppApiClient {
   public async getReferralSummary(): Promise<MiniAppReferralSummary> {
     const response = await this.send("/v1/referrals", "GET");
     return (await response.json() as { referral: MiniAppReferralSummary }).referral;
+  }
+
+  public async getPartnerEarnings(): Promise<MiniAppPartnerEarnings | null> {
+    const response = await this.send("/v1/partner/earnings", "GET");
+    return (await response.json() as { earnings: MiniAppPartnerEarnings | null }).earnings;
   }
 
   public async submitBetaFeedback(message: string): Promise<void> {

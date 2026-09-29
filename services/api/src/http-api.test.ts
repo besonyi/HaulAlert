@@ -331,3 +331,31 @@ test("authenticated customers can submit bounded beta feedback", async () => {
     await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
   }
 });
+
+test("authenticated customers can read only their own partner earnings", async () => {
+  const received: string[] = [];
+  const server = createMiniAppApiServer({
+    alerts: {} as AlertManagementRepository,
+    dashboard: { getForUser: async () => ({ activeAlertCount: 0, loadsFoundLast24Hours: 0, recentNotifications: [] }) },
+    partners: {
+      approve: async () => undefined,
+      getEarnings: async (userId) => {
+        received.push(userId);
+        return { status: "active", pendingCents: 375, availableCents: 750 };
+      }
+    },
+    authenticate: (initData) => ({ id: `user-${initData}`, firstName: "Alex" })
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("Expected a TCP server address");
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/partner/earnings`, { headers: { authorization: "tma verified" } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { earnings: { status: "active", pendingCents: 375, availableCents: 750 } });
+    assert.deepEqual(received, ["user-verified"]);
+  } finally {
+    await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
+  }
+});

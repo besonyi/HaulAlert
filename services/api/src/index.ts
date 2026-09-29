@@ -18,6 +18,7 @@ export { BetaFeedbackValidationError, PostgresBetaFeedbackRepository, normalizeB
 export { InactiveSubscriptionError, PlanLimitExceededError, PostgresEntitlementRepository, type AccountEntitlement } from "./entitlements.js";
 export { PostgresReferralRepository, type ReferralSummary } from "./referrals.js";
 export { PostgresPartnerAccountRepository, type PartnerAccount, type PartnerRewardMode, type PartnerStatus } from "./partner-accounts.js";
+export { PostgresPartnerEarningsRepository, type PartnerEarningsSummary } from "./partner-earnings.js";
 export {
   PostgresSubscriptionCheckoutService,
   PostgresSubscriptionPortalService,

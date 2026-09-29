@@ -7,6 +7,7 @@ import {
   type MiniAppBrokerProfile,
   type MiniAppDashboard,
   type MiniAppEntitlement,
+  type MiniAppPartnerEarnings,
   type MiniAppReferralSummary
 } from "./api.js";
 import { locationsFromForm } from "./location-form.js";
@@ -42,6 +43,7 @@ let alerts: readonly MiniAppAlert[] = [];
 let dashboard: MiniAppDashboard | undefined;
 let entitlement: MiniAppEntitlement | undefined;
 let referral: MiniAppReferralSummary | undefined;
+let partnerEarnings: MiniAppPartnerEarnings | null | undefined;
 let screen: "dashboard" | "create" = "dashboard";
 let editingAlert: MiniAppAlert | undefined;
 let blockedBrokerIds: readonly string[] = [];
@@ -59,8 +61,8 @@ async function refresh(): Promise<void> {
   refreshing = true;
   render();
   try {
-    [alerts, dashboard, entitlement, referral] = await Promise.all([
-      client.listAlerts(), client.getDashboard(), client.getEntitlement(), client.getReferralSummary()
+    [alerts, dashboard, entitlement, referral, partnerEarnings] = await Promise.all([
+      client.listAlerts(), client.getDashboard(), client.getEntitlement(), client.getReferralSummary(), client.getPartnerEarnings()
     ]);
     message = "";
   } catch (error: unknown) {
@@ -97,6 +99,7 @@ function dashboardMarkup(): string {
     ${recentNotificationsMarkup()}
     ${planMarkup()}
     ${referralMarkup()}
+    ${partnerEarningsMarkup()}
     ${feedbackMarkup()}
   </section>`;
 }
@@ -142,6 +145,15 @@ function referralMarkup(): string {
     <div class="referral-stats"><span><strong>${referral.totalInvited}</strong> invited</span><span><strong>${referral.activePaid}</strong> active paid</span><span><strong>${escapeHtml(credit)}</strong></span></div>
     <div class="referral-link"><code>${escapeHtml(referral.code)}</code><div class="referral-actions"><button class="secondary" type="button" data-share-referral>Share in Telegram</button><button class="secondary" type="button" data-copy-referral>Copy link</button></div></div>
   </section>`;
+}
+
+function partnerEarningsMarkup(): string {
+  if (partnerEarnings === undefined || partnerEarnings === null) return "";
+  const rate = `${(partnerEarnings.commissionRateBasisPoints / 100).toFixed(0)}% recurring commission`;
+  const pending = formatCents(partnerEarnings.pendingCents);
+  const available = formatCents(partnerEarnings.availableCents);
+  const availability = partnerEarnings.nextAvailableAt === null ? "No commissions are in a hold period." : `Next release: ${formatTime(partnerEarnings.nextAvailableAt)}.`;
+  return `<section class="partner-earnings"><div><p class="eyebrow">PARTNER EARNINGS</p><h2>${escapeHtml(partnerEarnings.status === "active" ? "Commission balance" : "Partner review")}</h2></div><p>${escapeHtml(partnerEarnings.status === "active" ? `${rate} · ${partnerEarnings.holdDays}-day hold before availability.` : "Your Partner account is not active, so commissions are not available for payout.")}</p><div class="partner-earnings-stats"><span><strong>${escapeHtml(pending)}</strong> pending</span><span><strong>${escapeHtml(available)}</strong> available</span><span><strong>${escapeHtml(formatCents(partnerEarnings.lifetimeEarnedCents))}</strong> lifetime</span></div><small>${escapeHtml(availability)} No wallet or withdrawal is available yet.</small></section>`;
 }
 
 function recentNotificationsMarkup(): string {
@@ -609,6 +621,15 @@ function locationLabel(locations: CanonicalFilter["origins"]): string {
 
 function shortLocation(location: { readonly city: string | null; readonly state: string | null }): string {
   return [location.city, location.state].filter((part): part is string => part !== null).join(", ") || "Unknown";
+}
+
+function formatCents(value: number): string {
+  return `$${(value / 100).toFixed(2)}`;
+}
+
+function formatTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "an upcoming review date" : date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function readableError(error: unknown): string {

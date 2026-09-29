@@ -38,6 +38,7 @@ export interface MiniAppApiDependencies {
   };
   readonly partners?: {
     approve(userId: string): Promise<unknown | undefined>;
+    getEarnings?(userId: string): Promise<unknown | undefined>;
   };
   readonly audit?: {
     record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested" | "beta_feedback_reviewed"; readonly subjectUserId: string }): Promise<void>;
@@ -196,6 +197,10 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
     if (pathname === "/v1/referrals" && request.method === "GET") {
       if (dependencies.referrals === undefined) return { statusCode: 404, body: { error: "not_found" } };
       return { statusCode: 200, body: { referral: await dependencies.referrals.getForUser(user.id) } };
+    }
+    if (pathname === "/v1/partner/earnings" && request.method === "GET") {
+      if (dependencies.partners?.getEarnings === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      return { statusCode: 200, body: { earnings: await dependencies.partners.getEarnings(user.id) } };
     }
     if (pathname === "/v1/dashboard" && request.method === "GET") {
       return { statusCode: 200, body: { dashboard: await dependencies.dashboard.getForUser(user.id) } };

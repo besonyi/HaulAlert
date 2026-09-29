@@ -117,6 +117,18 @@ test("Mini App API client reads the signed-in user's referral summary", async ()
   assert.equal(referral.code, "A7K92D4F");
 });
 
+test("Mini App API client reads only the signed-in partner's earnings", async () => {
+  let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
+  const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {
+    captured = { input, ...(init === undefined ? {} : { init }) };
+    return new Response(JSON.stringify({ earnings: { status: "active", pendingCents: 375, availableCents: 0 } }));
+  });
+  const earnings = await client.getPartnerEarnings();
+  assert.equal(captured?.input, "/api/v1/partner/earnings");
+  assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
+  assert.equal(earnings?.pendingCents, 375);
+});
+
 test("Mini App API client starts Essential checkout with the Telegram authorization", async () => {
   let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
   const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {
