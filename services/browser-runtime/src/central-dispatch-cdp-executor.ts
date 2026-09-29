@@ -88,7 +88,7 @@ export class LocalChromeDevToolsRuntime implements ChromeDevToolsRuntime {
     private readonly requestTimeoutMs: number = defaultRequestTimeoutMs
   ) {
     this.endpoint = new URL(endpoint);
-    assertLoopbackEndpoint(this.endpoint);
+    assertLocalChromeDevToolsEndpoint(this.endpoint);
     assertRequestTimeout(requestTimeoutMs);
   }
 
@@ -160,9 +160,15 @@ function toFetchExpression(request: CentralDispatchOpenSearchRequest, requestTim
   ].join("");
 }
 
-function assertLoopbackEndpoint(endpoint: URL): void {
-  if (endpoint.protocol !== "http:" || !isLoopbackHost(endpoint.hostname)) {
-    throw new Error("Chrome DevTools endpoint must use loopback HTTP");
+/** Ensures Chrome DevTools stays local and cannot receive embedded credentials. */
+export function assertLocalChromeDevToolsEndpoint(endpoint: URL): void {
+  if (
+    endpoint.protocol !== "http:" ||
+    endpoint.username.length > 0 ||
+    endpoint.password.length > 0 ||
+    !isLoopbackHost(endpoint.hostname)
+  ) {
+    throw new Error("Chrome DevTools endpoint must use credential-free loopback HTTP");
   }
 }
 

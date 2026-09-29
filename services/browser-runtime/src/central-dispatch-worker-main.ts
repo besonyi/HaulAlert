@@ -14,6 +14,7 @@ import { getDatabaseUrl, PgPoolSqlExecutor } from "@haulalert/notification-servi
 import { AsyncNewLoadDetector } from "@haulalert/new-load-detector";
 import { Pool } from "pg";
 
+import { assertLocalChromeDevToolsEndpoint } from "./central-dispatch-cdp-executor.js";
 import {
   BrowserRuntimeOrchestrator,
   BrowserScanCoordinator,
@@ -49,7 +50,7 @@ export function getCentralDispatchWorkerRuntimeConfig(
   return {
     databaseUrl: getDatabaseUrl(environment),
     sessionId: getRequiredText(environment.CENTRAL_DISPATCH_SESSION_ID, "central-dispatch-local", "CENTRAL_DISPATCH_SESSION_ID"),
-    chromeDevToolsEndpoint: getRequiredText(
+    chromeDevToolsEndpoint: getLocalChromeDevToolsEndpoint(
       environment.CENTRAL_DISPATCH_DEVTOOLS_ENDPOINT,
       "http://127.0.0.1:9222",
       "CENTRAL_DISPATCH_DEVTOOLS_ENDPOINT"
@@ -152,6 +153,23 @@ export async function runCentralDispatchWorker(
 function getRequiredText(value: string | undefined, fallback: string, variableName: string): string {
   const result = value?.trim() || fallback;
   if (result.length === 0) throw new Error(`${variableName} must not be empty`);
+  return result;
+}
+
+function getLocalChromeDevToolsEndpoint(value: string | undefined, fallback: string, variableName: string): string {
+  const result = getRequiredText(value, fallback, variableName);
+  let endpoint: URL;
+  try {
+    endpoint = new URL(result);
+  } catch {
+    throw new Error(`${variableName} must be a valid URL`);
+  }
+
+  try {
+    assertLocalChromeDevToolsEndpoint(endpoint);
+  } catch {
+    throw new Error(`${variableName} must use credential-free loopback HTTP`);
+  }
   return result;
 }
 

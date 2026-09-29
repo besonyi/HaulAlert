@@ -39,4 +39,28 @@ describe("Central Dispatch worker runtime config", () => {
       /CENTRAL_DISPATCH_BATCH_SIZE must be a positive integer/
     );
   });
+
+  it("rejects non-local, encrypted, credentialed, and malformed DevTools endpoints", () => {
+    for (const endpoint of [
+      "http://192.168.1.25:9222",
+      "https://127.0.0.1:9222",
+      "http://operator:secret@127.0.0.1:9222"
+    ]) {
+      assert.throws(
+        () => getCentralDispatchWorkerRuntimeConfig({
+          DATABASE_URL: "postgresql://localhost/haulalert",
+          CENTRAL_DISPATCH_DEVTOOLS_ENDPOINT: endpoint
+        }),
+        /CENTRAL_DISPATCH_DEVTOOLS_ENDPOINT must use credential-free loopback HTTP/
+      );
+    }
+
+    assert.throws(
+      () => getCentralDispatchWorkerRuntimeConfig({
+        DATABASE_URL: "postgresql://localhost/haulalert",
+        CENTRAL_DISPATCH_DEVTOOLS_ENDPOINT: "not a URL"
+      }),
+      /CENTRAL_DISPATCH_DEVTOOLS_ENDPOINT must be a valid URL/
+    );
+  });
 });
