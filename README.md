@@ -26,6 +26,18 @@ pnpm install
 pnpm check
 ```
 
+To measure matching and browser-tab scheduling locally before selecting a
+production capacity target, run the bounded smoke workload:
+
+```bash
+pnpm load:test
+```
+
+It defaults to 3,000 alerts, 300 loads, and 2,000 tabs. Override the workload
+with `HAULALERT_LOAD_TEST_ALERTS`, `HAULALERT_LOAD_TEST_LOADS`, and
+`HAULALERT_LOAD_TEST_TABS`; the command reports measurements but does not set a
+pass/fail performance threshold.
+
 To prepare Telegram delivery locally, copy `.env.example` to `.env` and set `TELEGRAM_BOT_TOKEN`. The token stays server-side; customers are addressed using the Telegram chat ID established during Bot onboarding. The PostgreSQL migration and transactional delivery rules are in [infra/database](infra/database/README.md).
 
 The internal admin page is a separate Telegram Mini App. Configure `ADMIN_VIEWER_TELEGRAM_USER_IDS` for read-only access and `ADMIN_OPERATOR_TELEGRAM_USER_IDS` for protected operator actions; the API rejects every other account. `ADMIN_TELEGRAM_USER_IDS` remains supported as a legacy full-access operator list. Run it locally with `pnpm --filter @haulalert/admin start` (default port `3003`), after starting the API service.

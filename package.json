@@ -13,7 +13,8 @@
     "lint": "pnpm --recursive --if-present run lint",
     "typecheck": "pnpm --recursive --if-present run typecheck",
     "test": "pnpm run build && pnpm --recursive --if-present run test",
-    "check": "pnpm run lint && pnpm run typecheck && pnpm run test"
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test",
+    "load:test": "pnpm run build && node scripts/load-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.7.2",
