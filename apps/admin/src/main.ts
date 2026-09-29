@@ -1,4 +1,5 @@
 import { AdminApiClient, AdminApiError, type AdminAuditEvent, type AdminRole, type AdminSearchResults, type AdminSystemOverview, type OperationalCount, type OperationalRecoveryItem } from "./api.js";
+import { operationalStatus } from "./operational-status.js";
 
 interface TelegramWebApp {
   readonly initData: string;
@@ -42,9 +43,11 @@ async function refresh(): Promise<void> {
 }
 
 function renderOverview(overview: AdminSystemOverview): void {
+  const status = operationalStatus(overview);
   root.innerHTML = `<main class="shell">
     <header><div><p class="eyebrow">HAULALERT · OPERATIONS</p><h1>System health</h1></div><button class="refresh" type="button" data-refresh>Refresh</button></header>
     <p class="operator">Signed in as ${escapeHtml(telegram?.initDataUnsafe?.user?.first_name ?? "operator")} · ${adminRole === "operator" ? "Operator" : "Viewer"}</p>
+    <section class="operational-status ${status.tone}" aria-live="polite"><strong>${escapeHtml(status.title)}</strong><span>${escapeHtml(status.detail)}</span></section>
     <section class="totals" aria-label="System totals">
       ${total("Users", overview.users)}${total("Active alerts", overview.activeAlerts)}${total("Loads", overview.loads)}
     </section>

@@ -7,6 +7,7 @@ header { display: flex; align-items: start; justify-content: space-between; gap:
 .eyebrow { margin: 0 0 5px; color: #007c91; font-size: 11px; font-weight: 800; letter-spacing: .13em; }
 h1 { margin: 0; font-size: clamp(30px, 8vw, 42px); letter-spacing: -.04em; }
 .operator, .footnote { color: #627d98; font-size: 14px; }
+.operational-status { display: grid; gap: 4px; margin-top: 17px; padding: 12px 14px; border: 1px solid #b7e5de; border-radius: 13px; background: #effbf8; }.operational-status.attention { border-color: #efd59a; background: #fffaf0; }.operational-status strong { color: #005f6f; font-size: 14px; }.operational-status.attention strong { color: #9c5400; }.operational-status span { color: #486581; font-size: 13px; line-height: 1.4; }
 .refresh { min-height: 38px; padding: 0 13px; border: 1px solid #9ed8d0; border-radius: 10px; background: #effbf8; color: #005f6f; font-weight: 800; }
 .totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 25px 0 20px; }
 .total, .group, .error { border: 1px solid #d9e2ec; border-radius: 17px; background: #fff; box-shadow: 0 10px 26px rgb(16 42 67 / .05); }
