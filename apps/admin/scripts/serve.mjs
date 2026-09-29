@@ -5,6 +5,7 @@ import { resolve, sep } from "node:path";
 const adminPort = readPort(process.env.ADMIN_PORT, 3003);
 const apiOrigin = process.env.ADMIN_API_ORIGIN ?? "http://127.0.0.1:3001";
 const staticRoot = resolve("dist");
+const maximumRequestBodyBytes = 1_000_000;
 
 createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://localhost");
@@ -14,9 +15,9 @@ createServer(async (request, response) => {
       return;
     }
     await serveStatic(response, url.pathname);
-  } catch {
-    response.statusCode = 500;
-    response.end("Internal server error");
+  } catch (error) {
+    response.statusCode = error instanceof RequestBodyTooLargeError ? 413 : 500;
+    response.end(response.statusCode === 413 ? "Request body too large" : "Internal server error");
   }
 }).listen(adminPort, () => {
   console.info(`HaulAlert Admin listening on http://127.0.0.1:${adminPort}`);
@@ -57,9 +58,17 @@ async function proxyApi(request, response, url) {
 
 async function readBody(request) {
   const chunks = [];
-  for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  let length = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    length += buffer.length;
+    if (length > maximumRequestBodyBytes) throw new RequestBodyTooLargeError();
+    chunks.push(buffer);
+  }
   return Buffer.concat(chunks);
 }
+
+class RequestBodyTooLargeError extends Error {}
 
 function contentType(filePath) {
   if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
