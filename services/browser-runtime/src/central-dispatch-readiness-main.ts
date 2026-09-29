@@ -15,7 +15,7 @@ export async function runCentralDispatchReadinessCheck(): Promise<void> {
     console.info("Central Dispatch readiness check passed: authenticated page detected through local Chrome.");
     return;
   }
-  throw new Error(`Central Dispatch readiness check failed: ${result.error.message}`);
+  throw new Error("Central Dispatch readiness check failed; authenticated page is not reachable.");
 }
 
 function isMainModule(): boolean {
@@ -24,9 +24,8 @@ function isMainModule(): boolean {
 }
 
 if (isMainModule()) {
-  void runCentralDispatchReadinessCheck().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : "Central Dispatch readiness check failed";
-    console.error(message);
+  void runCentralDispatchReadinessCheck().catch(() => {
+    console.error("Central Dispatch readiness check failed; inspect local Chrome availability and worker configuration.");
     process.exitCode = 1;
   });
 }
