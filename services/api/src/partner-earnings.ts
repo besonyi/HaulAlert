@@ -2,6 +2,9 @@ import type { SqlExecutor } from "@haulalert/notification-service";
 
 import type { PartnerStatus } from "./partner-accounts.js";
 
+export const minimumCashOutCents = 5_000;
+export type CashOutBlockReason = "partner_inactive" | "negative_balance" | "minimum_balance" | null;
+
 export interface PartnerEarningsSummary {
   readonly status: PartnerStatus;
   readonly commissionRateBasisPoints: number;
@@ -10,6 +13,9 @@ export interface PartnerEarningsSummary {
   readonly availableCents: number;
   readonly lifetimeEarnedCents: number;
   readonly nextAvailableAt: string | null;
+  readonly cashOutMinimumCents: number;
+  readonly cashOutEligible: boolean;
+  readonly cashOutBlockReason: CashOutBlockReason;
 }
 
 /** Reads one partner's own commission totals; it never exposes referral identities. */
@@ -37,15 +43,26 @@ export class PostgresPartnerEarningsRepository {
 }
 
 function summary(row: Record<string, unknown>): PartnerEarningsSummary {
+  const status = partnerStatus(row.status);
+  const availableCents = signedCents(row.available_cents, "available commission");
   return {
-    status: partnerStatus(row.status),
+    status,
     commissionRateBasisPoints: cents(row.commission_rate_basis_points, "commission rate"),
     holdDays: cents(row.hold_days, "hold days"),
     pendingCents: cents(row.pending_cents, "pending commission"),
-    availableCents: signedCents(row.available_cents, "available commission"),
+    availableCents,
     lifetimeEarnedCents: cents(row.lifetime_earned_cents, "lifetime commission"),
-    nextAvailableAt: row.next_available_at === null || row.next_available_at === undefined ? null : timestamp(row.next_available_at)
+    nextAvailableAt: row.next_available_at === null || row.next_available_at === undefined ? null : timestamp(row.next_available_at),
+    cashOutMinimumCents: minimumCashOutCents,
+    cashOutEligible: cashOutBlockReason(status, availableCents) === null,
+    cashOutBlockReason: cashOutBlockReason(status, availableCents)
   };
+}
+
+function cashOutBlockReason(status: PartnerStatus, availableCents: number): CashOutBlockReason {
+  if (status !== "active") return "partner_inactive";
+  if (availableCents < 0) return "negative_balance";
+  return availableCents < minimumCashOutCents ? "minimum_balance" : null;
 }
 
 function partnerStatus(value: unknown): PartnerStatus {

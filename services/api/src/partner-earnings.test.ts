@@ -21,7 +21,8 @@ test("partner earnings are scoped to one account and separate pending from avail
   assert.deepEqual(await repository.getForUser("11111111-1111-4111-8111-111111111111"), {
     status: "active", commissionRateBasisPoints: 1500, holdDays: 21,
     pendingCents: 375, availableCents: 750, lifetimeEarnedCents: 1125,
-    nextAvailableAt: "2026-10-20T00:00:00.000Z"
+    nextAvailableAt: "2026-10-20T00:00:00.000Z",
+    cashOutMinimumCents: 5000, cashOutEligible: false, cashOutBlockReason: "minimum_balance"
   });
   assert.deepEqual(parameters, ["11111111-1111-4111-8111-111111111111"]);
   assert.match(statement, /sum\(amount_cents\) FROM partner_ledger_entries/);
@@ -35,7 +36,24 @@ test("partner earnings preserve a negative ledger balance for future clawback re
       next_available_at: null
     }] })
   });
-  assert.equal((await repository.getForUser("11111111-1111-4111-8111-111111111111"))?.availableCents, -375);
+  assert.deepEqual(await repository.getForUser("11111111-1111-4111-8111-111111111111"), {
+    status: "active", commissionRateBasisPoints: 1500, holdDays: 21,
+    pendingCents: 0, availableCents: -375, lifetimeEarnedCents: 375, nextAvailableAt: null,
+    cashOutMinimumCents: 5000, cashOutEligible: false, cashOutBlockReason: "negative_balance"
+  });
+});
+
+test("active partners meet cash-out readiness only at the configured minimum", async () => {
+  const repository = new PostgresPartnerEarningsRepository({
+    query: async () => ({ rows: [{
+      status: "active", commission_rate_basis_points: 1500, hold_days: 21,
+      pending_cents: 0, available_cents: 5000, lifetime_earned_cents: 5000,
+      next_available_at: null
+    }] })
+  });
+  const earnings = await repository.getForUser("11111111-1111-4111-8111-111111111111");
+  assert.equal(earnings?.cashOutEligible, true);
+  assert.equal(earnings?.cashOutBlockReason, null);
 });
 
 test("partner earnings are absent for a user without a partner account", async () => {

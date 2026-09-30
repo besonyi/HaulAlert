@@ -155,7 +155,14 @@ function partnerEarningsMarkup(): string {
   const pending = formatCents(partnerEarnings.pendingCents);
   const available = formatCents(partnerEarnings.availableCents);
   const availability = partnerEarnings.nextAvailableAt === null ? "No commissions are in a hold period." : `Next release: ${formatTime(partnerEarnings.nextAvailableAt)}.`;
-  return `<section class="partner-earnings"><div><p class="eyebrow">PARTNER EARNINGS</p><h2>${escapeHtml(partnerEarnings.status === "active" ? "Commission balance" : "Partner review")}</h2></div><p>${escapeHtml(partnerEarnings.status === "active" ? `${rate} · ${partnerEarnings.holdDays}-day hold before availability.` : "Your Partner account is not active, so commissions are not available for payout.")}</p><div class="partner-earnings-stats"><span><strong>${escapeHtml(pending)}</strong> pending</span><span><strong>${escapeHtml(available)}</strong> available</span><span><strong>${escapeHtml(formatCents(partnerEarnings.lifetimeEarnedCents))}</strong> lifetime</span></div>${partnerLedgerMarkup()}<small>${escapeHtml(availability)} No wallet or withdrawal is available yet.</small></section>`;
+  return `<section class="partner-earnings"><div><p class="eyebrow">PARTNER EARNINGS</p><h2>${escapeHtml(partnerEarnings.status === "active" ? "Commission balance" : "Partner review")}</h2></div><p>${escapeHtml(partnerEarnings.status === "active" ? `${rate} · ${partnerEarnings.holdDays}-day hold before availability.` : "Your Partner account is not active, so commissions are not available for payout.")}</p><div class="partner-earnings-stats"><span><strong>${escapeHtml(pending)}</strong> pending</span><span><strong>${escapeHtml(available)}</strong> available</span><span><strong>${escapeHtml(formatCents(partnerEarnings.lifetimeEarnedCents))}</strong> lifetime</span></div><p class="cashout-readiness">${escapeHtml(cashOutReadiness(partnerEarnings))}</p>${partnerLedgerMarkup()}<small>${escapeHtml(availability)} Cash-out requests are not available yet.</small></section>`;
+}
+
+function cashOutReadiness(earnings: MiniAppPartnerEarnings): string {
+  if (earnings.cashOutEligible) return `Cash-out readiness met at ${formatCents(earnings.cashOutMinimumCents)}. The first request will require manual review when cash-out opens.`;
+  if (earnings.cashOutBlockReason === "negative_balance") return `Cash-out is locked while the negative balance of ${formatCents(-earnings.availableCents)} is repaid by future earnings.`;
+  if (earnings.cashOutBlockReason === "minimum_balance") return `Cash-out opens at ${formatCents(earnings.cashOutMinimumCents)}; ${formatCents(Math.max(0, earnings.cashOutMinimumCents - earnings.availableCents))} more is needed.`;
+  return "Cash-out readiness begins after Partner approval.";
 }
 
 function partnerLedgerMarkup(): string {
@@ -640,7 +647,7 @@ function shortLocation(location: { readonly city: string | null; readonly state:
 }
 
 function formatCents(value: number): string {
-  return `$${(value / 100).toFixed(2)}`;
+  return `${value < 0 ? "-" : ""}$${(Math.abs(value) / 100).toFixed(2)}`;
 }
 
 function formatTime(value: string): string {
