@@ -31,7 +31,7 @@ export interface AdminSearchResults {
 export interface AdminAuditEvent {
   readonly id: string;
   readonly actorTelegramUserId: string;
-  readonly action: "partner_approval_requested" | "partner_risk_updated" | "beta_feedback_reviewed";
+  readonly action: "partner_approval_requested" | "partner_risk_updated" | "partner_cashout_frozen" | "partner_cashout_unfrozen" | "beta_feedback_reviewed";
   readonly subjectUserId: string;
   readonly createdAt: string;
 }
@@ -117,6 +117,14 @@ export class AdminApiClient {
 
   public async setPartnerRisk(userId: string, riskLevel: "trusted" | "high-risk"): Promise<void> {
     const response = await this.request(`${this.baseUrl}/v1/admin/partners/${encodeURIComponent(userId)}/risk/${riskLevel}`, {
+      method: "POST",
+      headers: { authorization: `tma ${this.initData}` }
+    });
+    if (!response.ok) throw await errorFrom(response);
+  }
+
+  public async setPartnerCashOutHold(userId: string, action: "freeze" | "unfreeze"): Promise<void> {
+    const response = await this.request(`${this.baseUrl}/v1/admin/partners/${encodeURIComponent(userId)}/cash-out/${action}`, {
       method: "POST",
       headers: { authorization: `tma ${this.initData}` }
     });

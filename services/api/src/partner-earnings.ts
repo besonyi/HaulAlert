@@ -3,7 +3,7 @@ import type { SqlExecutor } from "@haulalert/notification-service";
 import type { PartnerStatus } from "./partner-accounts.js";
 
 export const minimumCashOutCents = 5_000;
-export type CashOutBlockReason = "partner_inactive" | "negative_balance" | "minimum_balance" | null;
+export type CashOutBlockReason = "partner_inactive" | "negative_balance" | "minimum_balance" | "account_restricted" | null;
 
 export interface PartnerEarningsSummary {
   readonly status: PartnerStatus;
@@ -32,7 +32,9 @@ export class PostgresPartnerEarningsRepository {
         COALESCE((SELECT sum(commission_amount_cents) FROM partner_commissions
           WHERE partner_commissions.partner_account_id = partner_accounts.id AND partner_commissions.status IN ('pending', 'available', 'reversed')), 0) AS lifetime_earned_cents,
         (SELECT min(hold_until) FROM partner_commissions
-          WHERE partner_commissions.partner_account_id = partner_accounts.id AND partner_commissions.status = 'pending') AS next_available_at
+          WHERE partner_commissions.partner_account_id = partner_accounts.id AND partner_commissions.status = 'pending') AS next_available_at,
+        EXISTS (SELECT 1 FROM partner_cashout_holds
+          WHERE partner_cashout_holds.partner_account_id = partner_accounts.id AND partner_cashout_holds.status = 'open') AS has_cashout_hold
       FROM partner_accounts
       WHERE partner_accounts.user_id = $1::uuid`,
       [userId]
@@ -45,6 +47,7 @@ export class PostgresPartnerEarningsRepository {
 function summary(row: Record<string, unknown>): PartnerEarningsSummary {
   const status = partnerStatus(row.status);
   const availableCents = signedCents(row.available_cents, "available commission");
+  const blockReason = cashOutBlockReason(status, availableCents, row.has_cashout_hold === true || row.has_cashout_hold === "true");
   return {
     status,
     commissionRateBasisPoints: cents(row.commission_rate_basis_points, "commission rate"),
@@ -54,13 +57,14 @@ function summary(row: Record<string, unknown>): PartnerEarningsSummary {
     lifetimeEarnedCents: cents(row.lifetime_earned_cents, "lifetime commission"),
     nextAvailableAt: row.next_available_at === null || row.next_available_at === undefined ? null : timestamp(row.next_available_at),
     cashOutMinimumCents: minimumCashOutCents,
-    cashOutEligible: cashOutBlockReason(status, availableCents) === null,
-    cashOutBlockReason: cashOutBlockReason(status, availableCents)
+    cashOutEligible: blockReason === null,
+    cashOutBlockReason: blockReason
   };
 }
 
-function cashOutBlockReason(status: PartnerStatus, availableCents: number): CashOutBlockReason {
+function cashOutBlockReason(status: PartnerStatus, availableCents: number, hasCashOutHold: boolean): CashOutBlockReason {
   if (status !== "active") return "partner_inactive";
+  if (hasCashOutHold) return "account_restricted";
   if (availableCents < 0) return "negative_balance";
   return availableCents < minimumCashOutCents ? "minimum_balance" : null;
 }

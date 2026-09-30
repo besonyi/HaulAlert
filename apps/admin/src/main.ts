@@ -73,6 +73,9 @@ function renderOverview(overview: AdminSystemOverview): void {
   root.querySelectorAll<HTMLButtonElement>("[data-partner-risk]").forEach((button) => {
     button.addEventListener("click", () => { void updatePartnerRisk(button.dataset.partnerRisk, button.dataset.partnerRiskLevel); });
   });
+  root.querySelectorAll<HTMLButtonElement>("[data-partner-cashout-hold]").forEach((button) => {
+    button.addEventListener("click", () => { void updatePartnerCashOutHold(button.dataset.partnerCashoutHold, button.dataset.partnerCashoutAction); });
+  });
   root.querySelectorAll<HTMLButtonElement>("[data-review-feedback]").forEach((button) => {
     button.addEventListener("click", () => { void reviewFeedback(button.dataset.reviewFeedback); });
   });
@@ -135,7 +138,7 @@ function simpleItem(title: string, detail?: string, action?: string): string {
 }
 
 function partnerApprovalMarkup(userId: string): string {
-  return adminRole === "operator" ? `<div class="partner-controls"><button class="partner-approve" type="button" data-approve-partner="${escapeHtml(userId)}">Approve partner</button><button class="partner-risk" type="button" data-partner-risk="${escapeHtml(userId)}" data-partner-risk-level="trusted">Mark trusted · 14d</button><button class="partner-risk high-risk" type="button" data-partner-risk="${escapeHtml(userId)}" data-partner-risk-level="high-risk">High risk · 30d</button></div>` : "";
+  return adminRole === "operator" ? `<div class="partner-controls"><button class="partner-approve" type="button" data-approve-partner="${escapeHtml(userId)}">Approve partner</button><button class="partner-risk" type="button" data-partner-risk="${escapeHtml(userId)}" data-partner-risk-level="trusted">Mark trusted · 14d</button><button class="partner-risk high-risk" type="button" data-partner-risk="${escapeHtml(userId)}" data-partner-risk-level="high-risk">High risk · 30d</button><button class="partner-hold" type="button" data-partner-cashout-hold="${escapeHtml(userId)}" data-partner-cashout-action="freeze">Freeze cash-out</button><button class="partner-hold release" type="button" data-partner-cashout-hold="${escapeHtml(userId)}" data-partner-cashout-action="unfreeze">Unfreeze cash-out</button></div>` : "";
 }
 
 function searchGroup(title: string, rows: readonly string[]): string {
@@ -188,6 +191,20 @@ async function updatePartnerRisk(userId: string | undefined, riskLevel: string |
     searchMessage = error instanceof AdminApiError && error.statusCode === 409
       ? "This customer does not have an eligible partner account."
       : "Partner risk update could not be completed. Try again shortly.";
+  }
+  renderOverview(currentOverview);
+}
+
+async function updatePartnerCashOutHold(userId: string | undefined, action: string | undefined): Promise<void> {
+  if (client === undefined || currentOverview === undefined || userId === undefined || adminRole !== "operator" || (action !== "freeze" && action !== "unfreeze")) return;
+  try {
+    await client.setPartnerCashOutHold(userId, action);
+    auditEvents = await client.getAuditEvents();
+    searchMessage = action === "freeze" ? "Cash-out frozen and recorded in the audit trail." : "Cash-out hold removed and recorded in the audit trail.";
+  } catch (error: unknown) {
+    searchMessage = error instanceof AdminApiError && error.statusCode === 409
+      ? action === "freeze" ? "Cash-out is already frozen or this account is unavailable." : "No open cash-out hold was found for this account."
+      : "Cash-out control could not be completed. Try again shortly.";
   }
   renderOverview(currentOverview);
 }

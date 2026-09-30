@@ -14,7 +14,7 @@ credentials, session data, or customer-private content into that record.
 - [ ] The intended commit has passed the repository `pnpm check` and a
   successful GitHub Actions Verify run.
 - [ ] The release owner, on-call owner, and rollback decision maker are named.
-- [ ] All PostgreSQL migrations through `0018_partner_ledger.sql` have been
+- [ ] All PostgreSQL migrations through `0019_partner_cashout_holds.sql` have been
   applied in lexical order, with the deployment result recorded.
 - [ ] API `/healthz` and `/readyz`, plus Bot `/healthz`, return their expected
   responses from the production network path.

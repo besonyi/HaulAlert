@@ -80,9 +80,13 @@ test("admin client reads its role and sends protected partner controls", async (
   assert.equal(await client.getAccess(), "operator");
   await client.approvePartner("11111111-1111-4111-8111-111111111111");
   await client.setPartnerRisk("11111111-1111-4111-8111-111111111111", "high-risk");
+  await client.setPartnerCashOutHold("11111111-1111-4111-8111-111111111111", "freeze");
+  await client.setPartnerCashOutHold("11111111-1111-4111-8111-111111111111", "unfreeze");
   assert.deepEqual(requests, [
     { input: "/api/v1/admin/access", method: undefined },
     { input: "/api/v1/admin/partners/11111111-1111-4111-8111-111111111111/approve", method: "POST" },
-    { input: "/api/v1/admin/partners/11111111-1111-4111-8111-111111111111/risk/high-risk", method: "POST" }
+    { input: "/api/v1/admin/partners/11111111-1111-4111-8111-111111111111/risk/high-risk", method: "POST" },
+    { input: "/api/v1/admin/partners/11111111-1111-4111-8111-111111111111/cash-out/freeze", method: "POST" },
+    { input: "/api/v1/admin/partners/11111111-1111-4111-8111-111111111111/cash-out/unfreeze", method: "POST" }
   ]);
 });

@@ -74,7 +74,7 @@ export interface MiniAppPartnerEarnings {
   readonly nextAvailableAt: string | null;
   readonly cashOutMinimumCents: number;
   readonly cashOutEligible: boolean;
-  readonly cashOutBlockReason: "partner_inactive" | "negative_balance" | "minimum_balance" | null;
+  readonly cashOutBlockReason: "partner_inactive" | "negative_balance" | "minimum_balance" | "account_restricted" | null;
 }
 
 export interface MiniAppPartnerLedgerEntry {

@@ -15,6 +15,7 @@ export const requiredBackupTables = [
   "partner_accounts",
   "partner_commissions",
   "partner_ledger_entries",
+  "partner_cashout_holds",
   "stripe_webhook_events",
   "admin_audit_events",
   "beta_feedback"

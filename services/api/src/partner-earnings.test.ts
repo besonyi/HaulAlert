@@ -56,6 +56,25 @@ test("active partners meet cash-out readiness only at the configured minimum", a
   assert.equal(earnings?.cashOutBlockReason, null);
 });
 
+test("an open cash-out hold blocks an otherwise eligible partner without changing their balance", async () => {
+  let statement = "";
+  const repository = new PostgresPartnerEarningsRepository({
+    query: async (sql) => {
+      statement = sql;
+      return { rows: [{
+        status: "active", commission_rate_basis_points: 1500, hold_days: 21,
+        pending_cents: 0, available_cents: 5000, lifetime_earned_cents: 5000,
+        next_available_at: null, has_cashout_hold: true
+      }] };
+    }
+  });
+  const earnings = await repository.getForUser("11111111-1111-4111-8111-111111111111");
+  assert.equal(earnings?.availableCents, 5000);
+  assert.equal(earnings?.cashOutEligible, false);
+  assert.equal(earnings?.cashOutBlockReason, "account_restricted");
+  assert.match(statement, /partner_cashout_holds/);
+});
+
 test("partner earnings are absent for a user without a partner account", async () => {
   const repository = new PostgresPartnerEarningsRepository({ query: async () => ({ rows: [] }) });
   assert.equal(await repository.getForUser("11111111-1111-4111-8111-111111111111"), undefined);

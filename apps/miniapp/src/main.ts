@@ -162,6 +162,7 @@ function cashOutReadiness(earnings: MiniAppPartnerEarnings): string {
   if (earnings.cashOutEligible) return `Cash-out readiness met at ${formatCents(earnings.cashOutMinimumCents)}. The first request will require manual review when cash-out opens.`;
   if (earnings.cashOutBlockReason === "negative_balance") return `Cash-out is locked while the negative balance of ${formatCents(-earnings.availableCents)} is repaid by future earnings.`;
   if (earnings.cashOutBlockReason === "minimum_balance") return `Cash-out opens at ${formatCents(earnings.cashOutMinimumCents)}; ${formatCents(Math.max(0, earnings.cashOutMinimumCents - earnings.availableCents))} more is needed.`;
+  if (earnings.cashOutBlockReason === "account_restricted") return "Cash-out is temporarily unavailable. Contact HaulAlert support if you need help.";
   return "Cash-out readiness begins after Partner approval.";
 }
 

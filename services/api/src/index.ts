@@ -21,6 +21,7 @@ export { PostgresPartnerAccountRepository, type PartnerAccount, type PartnerRewa
 export { minimumCashOutCents, PostgresPartnerEarningsRepository, type CashOutBlockReason, type PartnerEarningsSummary } from "./partner-earnings.js";
 export { PostgresPartnerLedgerRepository, type PartnerLedgerEntry, type PartnerLedgerEntryType } from "./partner-ledger.js";
 export { PostgresPartnerCommissionReleaseRepository } from "./partner-commission-release.js";
+export { PostgresPartnerCashOutHoldRepository } from "./partner-cashout-holds.js";
 export {
   PostgresSubscriptionCheckoutService,
   PostgresSubscriptionPortalService,

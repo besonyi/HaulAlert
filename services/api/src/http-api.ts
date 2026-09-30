@@ -39,11 +39,13 @@ export interface MiniAppApiDependencies {
   readonly partners?: {
     approve(userId: string): Promise<unknown | undefined>;
     setRiskLevel?(userId: string, riskLevel: "new" | "trusted" | "high_risk"): Promise<unknown | undefined>;
+    freezeCashOut?(userId: string): Promise<boolean>;
+    unfreezeCashOut?(userId: string): Promise<boolean>;
     getEarnings?(userId: string): Promise<unknown | undefined>;
     getLedger?(userId: string): Promise<unknown>;
   };
   readonly audit?: {
-    record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested" | "partner_risk_updated" | "beta_feedback_reviewed"; readonly subjectUserId: string }): Promise<void>;
+    record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested" | "partner_risk_updated" | "partner_cashout_frozen" | "partner_cashout_unfrozen" | "beta_feedback_reviewed"; readonly subjectUserId: string }): Promise<void>;
     getRecent?(): Promise<unknown>;
   };
   readonly billing?: {
@@ -191,6 +193,20 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       });
       return { statusCode: 200, body: { partner } };
     }
+    const partnerCashOutHoldRoute = parseAdminPartnerCashOutHoldRoute(pathname);
+    if (partnerCashOutHoldRoute !== undefined && request.method === "POST") {
+      const operation = partnerCashOutHoldRoute.action === "freeze" ? dependencies.partners?.freezeCashOut : dependencies.partners?.unfreezeCashOut;
+      if (operation === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
+      if (roleFor(dependencies, user) !== "operator") return { statusCode: 403, body: { error: "forbidden" } };
+      if (!isUuid(partnerCashOutHoldRoute.userId)) return { statusCode: 400, body: { error: "invalid_user_id" } };
+      if (!await operation(partnerCashOutHoldRoute.userId)) return { statusCode: 409, body: { error: "cashout_hold_unavailable" } };
+      await dependencies.audit?.record({
+        actorTelegramUserId: user.telegramUserId ?? user.id,
+        action: partnerCashOutHoldRoute.action === "freeze" ? "partner_cashout_frozen" : "partner_cashout_unfrozen",
+        subjectUserId: partnerCashOutHoldRoute.userId
+      });
+      return { statusCode: 200, body: { status: partnerCashOutHoldRoute.action === "freeze" ? "frozen" : "unfrozen" } };
+    }
     if (pathname === "/v1/brokers" && request.method === "GET") {
       if (dependencies.brokerDirectory === undefined) return { statusCode: 404, body: { error: "not_found" } };
       const query = url.searchParams.get("q")?.trim() ?? "";
@@ -337,6 +353,14 @@ function parseAdminPartnerRiskRoute(pathname: string): { readonly userId: string
   const segments = pathname.split("/").filter((segment) => segment.length > 0);
   return segments[0] === "v1" && segments[1] === "admin" && segments[2] === "partners" && segments[4] === "risk" && segments.length === 6 && segments[3] !== undefined && segments[5] !== undefined
     ? { userId: segments[3], riskLevel: segments[5] }
+    : undefined;
+}
+
+function parseAdminPartnerCashOutHoldRoute(pathname: string): { readonly userId: string; readonly action: "freeze" | "unfreeze" } | undefined {
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+  const action = segments[5];
+  return segments[0] === "v1" && segments[1] === "admin" && segments[2] === "partners" && segments[4] === "cash-out" && segments.length === 6 && segments[3] !== undefined && (action === "freeze" || action === "unfreeze")
+    ? { userId: segments[3], action }
     : undefined;
 }
 
