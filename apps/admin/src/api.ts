@@ -11,6 +11,13 @@ export interface OperationalRecoveryItem {
   readonly nextRecoveryAt: string | null;
 }
 
+export interface NotificationBacklog {
+  readonly queued: number;
+  readonly retryScheduled: number;
+  readonly dueNow: number;
+  readonly oldestCreatedAt: string | null;
+}
+
 export interface AdminSystemOverview {
   readonly users: number;
   readonly activeAlerts: number;
@@ -18,6 +25,7 @@ export interface AdminSystemOverview {
   readonly sessions: readonly OperationalCount[];
   readonly tabs: readonly OperationalCount[];
   readonly deliveries: readonly OperationalCount[];
+  readonly notificationBacklog: NotificationBacklog;
   readonly recovery: readonly OperationalRecoveryItem[];
 }
 

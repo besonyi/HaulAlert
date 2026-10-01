@@ -14,6 +14,13 @@ export interface OperationalRecoveryItem {
   readonly nextRecoveryAt: string | null;
 }
 
+export interface NotificationBacklog {
+  readonly queued: number;
+  readonly retryScheduled: number;
+  readonly dueNow: number;
+  readonly oldestCreatedAt: string | null;
+}
+
 /** Credential-free operational summary exposed only through the Telegram allowlisted admin route. */
 export interface AdminSystemOverview {
   readonly users: number;
@@ -22,6 +29,7 @@ export interface AdminSystemOverview {
   readonly sessions: readonly OperationalCount[];
   readonly tabs: readonly OperationalCount[];
   readonly deliveries: readonly OperationalCount[];
+  readonly notificationBacklog: NotificationBacklog;
   readonly recovery: readonly OperationalRecoveryItem[];
 }
 
@@ -29,7 +37,7 @@ export class PostgresAdminDashboardRepository {
   public constructor(private readonly database: SqlExecutor) {}
 
   public async getOverview(): Promise<AdminSystemOverview> {
-    const [totals, sessions, tabs, deliveries, unhealthySessions, degradedTabs, failedScans] = await Promise.all([
+    const [totals, sessions, tabs, deliveries, notificationBacklog, unhealthySessions, degradedTabs, failedScans] = await Promise.all([
       this.database.query(`SELECT
         (SELECT count(*) FROM users) AS users,
         (SELECT count(*) FROM alerts WHERE status = 'active') AS active_alerts,
@@ -37,6 +45,12 @@ export class PostgresAdminDashboardRepository {
       this.database.query("SELECT provider || ':' || status AS key, count(*) AS count FROM browser_sessions GROUP BY provider, status ORDER BY key", []),
       this.database.query("SELECT provider || ':' || status AS key, count(*) AS count FROM browser_search_tabs GROUP BY provider, status ORDER BY key", []),
       this.database.query("SELECT status AS key, count(*) AS count FROM notification_deliveries GROUP BY status ORDER BY key", []),
+      this.database.query(`SELECT
+        count(*) FILTER (WHERE status = 'queued') AS queued_count,
+        count(*) FILTER (WHERE status = 'retry_scheduled') AS retry_scheduled_count,
+        count(*) FILTER (WHERE status IN ('queued', 'retry_scheduled') AND available_at <= now()) AS due_now_count,
+        min(created_at) FILTER (WHERE status IN ('queued', 'retry_scheduled')) AS oldest_created_at
+        FROM notification_deliveries`, []),
       this.database.query(`SELECT provider, status AS code, COALESCE(last_heartbeat_at, updated_at, created_at) AS observed_at
         FROM browser_sessions WHERE status <> 'healthy' ORDER BY updated_at DESC LIMIT 10`, []),
       this.database.query(`SELECT provider, status AS code, updated_at AS observed_at, next_recovery_at
@@ -54,6 +68,7 @@ export class PostgresAdminDashboardRepository {
       sessions: sessions.rows.map(summary),
       tabs: tabs.rows.map(summary),
       deliveries: deliveries.rows.map(summary),
+      notificationBacklog: backlog(notificationBacklog.rows[0]),
       recovery: [
         ...unhealthySessions.rows.map((row) => recoveryItem(row, "session")),
         ...degradedTabs.rows.map((row) => recoveryItem(row, "tab")),
@@ -61,6 +76,16 @@ export class PostgresAdminDashboardRepository {
       ].sort((left, right) => right.observedAt.localeCompare(left.observedAt))
     };
   }
+}
+
+function backlog(row: Record<string, unknown> | undefined): NotificationBacklog {
+  if (row === undefined) throw new Error("Expected notification backlog from PostgreSQL");
+  return {
+    queued: count(row.queued_count, "queued_count"),
+    retryScheduled: count(row.retry_scheduled_count, "retry_scheduled_count"),
+    dueNow: count(row.due_now_count, "due_now_count"),
+    oldestCreatedAt: row.oldest_created_at === null ? null : timestamp(row.oldest_created_at, "oldest notification backlog item")
+  };
 }
 
 function summary(row: Record<string, unknown>): OperationalCount {

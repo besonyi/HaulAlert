@@ -1,4 +1,4 @@
-import { AdminApiClient, AdminApiError, type AdminAuditEvent, type AdminBetaFeedback, type AdminCashOutRequest, type AdminRole, type AdminSearchResults, type AdminSystemOverview, type OperationalCount, type OperationalRecoveryItem } from "./api.js";
+import { AdminApiClient, AdminApiError, type AdminAuditEvent, type AdminBetaFeedback, type AdminCashOutRequest, type AdminRole, type AdminSearchResults, type AdminSystemOverview, type NotificationBacklog, type OperationalCount, type OperationalRecoveryItem } from "./api.js";
 import { operationalStatus } from "./operational-status.js";
 
 interface TelegramWebApp {
@@ -57,6 +57,7 @@ function renderOverview(overview: AdminSystemOverview): void {
       ${group("Provider sessions", overview.sessions, "No provider sessions recorded.")}
       ${group("Search tabs", overview.tabs, "No search tabs recorded.")}
       ${group("Delivery outcomes", overview.deliveries, "No delivery outcomes recorded.")}
+      ${notificationBacklogMarkup(overview.notificationBacklog)}
     </section>
     ${recoveryMarkup(overview.recovery)}
     ${cashOutReviewMarkup(cashOutRequests)}
@@ -84,6 +85,11 @@ function renderOverview(overview: AdminSystemOverview): void {
   root.querySelectorAll<HTMLButtonElement>("[data-review-cashout-request]").forEach((button) => {
     button.addEventListener("click", () => { void reviewCashOutRequest(button.dataset.reviewCashoutRequest, button.dataset.reviewCashoutAction); });
   });
+}
+
+function notificationBacklogMarkup(backlog: NotificationBacklog): string {
+  const oldest = backlog.oldestCreatedAt === null ? "No queued deliveries." : `Oldest queued ${formatTime(backlog.oldestCreatedAt)}.`;
+  return `<section class="group"><h2>Notification backlog</h2><dl><div><dt>Queued</dt><dd>${backlog.queued.toLocaleString()}</dd></div><div><dt>Retry scheduled</dt><dd>${backlog.retryScheduled.toLocaleString()}</dd></div><div><dt>Due now</dt><dd>${backlog.dueNow.toLocaleString()}</dd></div></dl><p class="empty">${escapeHtml(oldest)} Counts are observable only; worker retries remain automatic.</p></section>`;
 }
 
 function cashOutReviewMarkup(items: readonly AdminCashOutRequest[]): string {

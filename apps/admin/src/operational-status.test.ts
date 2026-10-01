@@ -10,6 +10,7 @@ const baseline = {
   sessions: [],
   tabs: [],
   deliveries: [],
+  notificationBacklog: { queued: 0, retryScheduled: 0, dueNow: 0, oldestCreatedAt: null },
   recovery: []
 } as const;
 
