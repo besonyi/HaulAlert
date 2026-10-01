@@ -30,6 +30,18 @@ export interface PartnerCashOutRequest {
 
 export type PartnerCashOutRequestStatus = "requested" | "reviewing" | "approved" | "processing" | "completed" | "rejected" | "cancelled" | "failed" | "frozen";
 
+export type CashOutReviewAction = "approve" | "reject";
+
+export interface AdminPartnerCashOutRequest extends PartnerCashOutRequest {
+  readonly partnerUserId: string;
+}
+
+export interface CashOutReviewResult {
+  readonly id: string;
+  readonly partnerUserId: string;
+  readonly status: "approved" | "rejected";
+}
+
 export class InvalidPartnerCashOutRequestError extends Error {}
 
 /** Persists manual-only requests and reserves their gross amount in the immutable ledger. */
@@ -130,6 +142,49 @@ export class PostgresPartnerCashOutRequestRepository {
     return result.rows.length === 1;
   }
 
+  /** Lists bounded open requests for protected Admin review without exposing wallet addresses. */
+  public async listForAdminReview(limit: number = 50): Promise<readonly AdminPartnerCashOutRequest[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Cash-out review limit must be an integer between 1 and 100");
+    const result = await this.database.query(
+      `SELECT id, partner_user_id, asset, network, wallet_address, gross_amount_cents, total_fee_cents, net_amount_cents, status, manual_review_required, requested_at
+      FROM partner_cashout_requests
+      WHERE status IN ('requested', 'reviewing', 'approved', 'processing')
+      ORDER BY requested_at ASC, id ASC
+      LIMIT $1`,
+      [limit]
+    );
+    return result.rows.map(adminRequest);
+  }
+
+  /** Approves or rejects a requested item. Rejecting restores its gross reservation atomically. */
+  public async reviewForAdmin(requestId: string, action: CashOutReviewAction, reviewerTelegramUserId: string): Promise<CashOutReviewResult | undefined> {
+    if (!/^-?\d+$/.test(reviewerTelegramUserId)) throw new Error("Expected an integer Telegram operator ID");
+    const result = await this.database.query(
+      action === "approve"
+        ? `UPDATE partner_cashout_requests
+          SET status = 'approved', reviewed_at = now(), reviewed_by_telegram_user_id = $2
+          WHERE id = $1::uuid AND status = 'requested' AND manual_review_required = true
+          RETURNING id, partner_user_id, status`
+        : `WITH rejected_request AS (
+          UPDATE partner_cashout_requests
+          SET status = 'rejected', reviewed_at = now(), reviewed_by_telegram_user_id = $2
+          WHERE id = $1::uuid AND status = 'requested' AND manual_review_required = true
+          RETURNING id, partner_account_id, partner_user_id, gross_amount_cents, status
+        ), restored_balance AS (
+          INSERT INTO partner_ledger_entries (
+            partner_account_id, partner_user_id, cashout_request_id, entry_type, amount_cents
+          )
+          SELECT partner_account_id, partner_user_id, id, 'cashout_reversal', gross_amount_cents
+          FROM rejected_request
+          RETURNING id
+        )
+        SELECT id, partner_user_id, status FROM rejected_request`,
+      [requestId, reviewerTelegramUserId]
+    );
+    const row = result.rows[0];
+    return row === undefined ? undefined : reviewResult(row);
+  }
+
   private method(assetValue: unknown, networkValue: unknown): CashOutMethod {
     const asset = typeof assetValue === "string" ? assetValue.trim().toLowerCase() : "";
     const network = typeof networkValue === "string" ? networkValue.trim().toLowerCase() : "";
@@ -159,6 +214,16 @@ function request(row: Record<string, unknown>): PartnerCashOutRequest {
     grossAmountCents: positiveCents(row.gross_amount_cents), totalFeeCents: positiveCents(row.total_fee_cents), netAmountCents: positiveCents(row.net_amount_cents),
     status, manualReviewRequired: row.manual_review_required === true || row.manual_review_required === "true", requestedAt: timestamp(row.requested_at)
   };
+}
+
+function adminRequest(row: Record<string, unknown>): AdminPartnerCashOutRequest {
+  return { ...request(row), partnerUserId: uuid(row.partner_user_id) };
+}
+
+function reviewResult(row: Record<string, unknown>): CashOutReviewResult {
+  const status = row.status;
+  if (status !== "approved" && status !== "rejected") return invalid("Expected cash-out review status");
+  return { id: uuid(row.id), partnerUserId: uuid(row.partner_user_id), status };
 }
 
 function wallet(value: unknown): string {

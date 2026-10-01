@@ -31,7 +31,7 @@ export interface AdminSearchResults {
 export interface AdminAuditEvent {
   readonly id: string;
   readonly actorTelegramUserId: string;
-  readonly action: "partner_approval_requested" | "partner_risk_updated" | "partner_cashout_frozen" | "partner_cashout_unfrozen" | "beta_feedback_reviewed";
+  readonly action: "partner_approval_requested" | "partner_risk_updated" | "partner_cashout_frozen" | "partner_cashout_unfrozen" | "partner_cashout_approved" | "partner_cashout_rejected" | "beta_feedback_reviewed";
   readonly subjectUserId: string;
   readonly createdAt: string;
 }
@@ -42,6 +42,20 @@ export interface AdminBetaFeedback {
   readonly message: string;
   readonly createdAt: string;
   readonly reviewedAt: string | null;
+}
+
+export interface AdminCashOutRequest {
+  readonly id: string;
+  readonly partnerUserId: string;
+  readonly asset: "usdt" | "usdc";
+  readonly network: string;
+  readonly walletDisplay: string;
+  readonly grossAmountCents: number;
+  readonly totalFeeCents: number;
+  readonly netAmountCents: number;
+  readonly status: "requested" | "reviewing" | "approved" | "processing";
+  readonly manualReviewRequired: boolean;
+  readonly requestedAt: string;
 }
 
 export type AdminRole = "viewer" | "operator";
@@ -89,6 +103,22 @@ export class AdminApiClient {
     });
     if (!response.ok) throw await errorFrom(response);
     return (await response.json() as { feedback: AdminBetaFeedback[] }).feedback;
+  }
+
+  public async getCashOutRequests(): Promise<readonly AdminCashOutRequest[]> {
+    const response = await this.request(`${this.baseUrl}/v1/admin/cash-out/requests`, {
+      headers: { authorization: `tma ${this.initData}` }
+    });
+    if (!response.ok) throw await errorFrom(response);
+    return (await response.json() as { requests: AdminCashOutRequest[] }).requests;
+  }
+
+  public async reviewCashOutRequest(requestId: string, action: "approve" | "reject"): Promise<void> {
+    const response = await this.request(`${this.baseUrl}/v1/admin/cash-out/requests/${encodeURIComponent(requestId)}/${action}`, {
+      method: "POST",
+      headers: { authorization: `tma ${this.initData}` }
+    });
+    if (!response.ok) throw await errorFrom(response);
   }
 
   public async markBetaFeedbackReviewed(feedbackId: string): Promise<void> {

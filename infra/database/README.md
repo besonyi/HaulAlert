@@ -26,6 +26,7 @@ psql "$DATABASE_URL" -f infra/database/migrations/0018_partner_ledger.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0019_partner_cashout_holds.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0020_partner_cashout_requests.sql
 psql "$DATABASE_URL" -f infra/database/migrations/0021_partner_cashout_request_cancellation.sql
+psql "$DATABASE_URL" -f infra/database/migrations/0022_partner_cashout_review_audit.sql
 ```
 
 The application must use four transactional patterns:

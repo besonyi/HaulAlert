@@ -226,7 +226,9 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
       approve: async (userId) => ({ userId, status: "active" }),
       setRiskLevel: async (userId, riskLevel) => ({ userId, riskLevel }),
       freezeCashOut: async () => true,
-      unfreezeCashOut: async () => true
+      unfreezeCashOut: async () => true,
+      getCashOutRequestsForReview: async () => [{ id: alertId, partnerUserId: userId, asset: "usdt", network: "tron", walletDisplay: "TQ5TzY…9K8L", status: "requested" }],
+      reviewCashOutRequest: async (requestId, action) => requestId === alertId ? { id: requestId, partnerUserId: userId, status: action === "approve" ? "approved" as const : "rejected" as const } : undefined
     },
     audit: {
       record: async (event) => { auditEvents.push(event); },
@@ -264,10 +266,15 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
     assert.deepEqual(await (await fetch(`${baseUrl}/v1/admin/beta-feedback`, { headers: { authorization: "tma admin-telegram-id" } })).json(), {
       feedback: [{ id: "feedback-1", message: "Helpful", userId, createdAt: "2026-09-29T00:00:00.000Z", reviewedAt: null }]
     });
+    assert.equal((await fetch(`${baseUrl}/v1/admin/cash-out/requests`, { headers: { authorization: "tma customer" } })).status, 403);
+    assert.deepEqual(await (await fetch(`${baseUrl}/v1/admin/cash-out/requests`, { headers: { authorization: "tma admin-telegram-id" } })).json(), {
+      requests: [{ id: alertId, partnerUserId: userId, asset: "usdt", network: "tron", walletDisplay: "TQ5TzY…9K8L", status: "requested" }]
+    });
     assert.deepEqual(await (await fetch(`${baseUrl}/v1/admin/access`, { headers: { authorization: "tma admin-telegram-id" } })).json(), { role: "operator" });
     assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma customer" } })).status, 403);
     assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/risk/high-risk`, { method: "POST", headers: { authorization: "tma customer" } })).status, 403);
     assert.equal((await fetch(`${baseUrl}/v1/admin/partners/${userId}/cash-out/freeze`, { method: "POST", headers: { authorization: "tma customer" } })).status, 403);
+    assert.equal((await fetch(`${baseUrl}/v1/admin/cash-out/requests/${alertId}/approve`, { method: "POST", headers: { authorization: "tma customer" } })).status, 403);
     assert.deepEqual(auditEvents, []);
     assert.equal((await fetch(`${baseUrl}/v1/admin/beta-feedback/11111111-1111-4111-8111-111111111111/review`, { method: "POST", headers: { authorization: "tma customer" } })).status, 403);
     const reviewed = await fetch(`${baseUrl}/v1/admin/beta-feedback/11111111-1111-4111-8111-111111111111/review`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } });
@@ -284,6 +291,11 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
     const unfrozen = await fetch(`${baseUrl}/v1/admin/partners/${userId}/cash-out/unfreeze`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } });
     assert.equal(unfrozen.status, 200);
     assert.deepEqual(await unfrozen.json(), { status: "unfrozen" });
+    const cashOutApproved = await fetch(`${baseUrl}/v1/admin/cash-out/requests/${alertId}/approve`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } });
+    assert.deepEqual(await cashOutApproved.json(), { request: { id: alertId, partnerUserId: userId, status: "approved" } });
+    const cashOutRejected = await fetch(`${baseUrl}/v1/admin/cash-out/requests/${alertId}/reject`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } });
+    assert.deepEqual(await cashOutRejected.json(), { request: { id: alertId, partnerUserId: userId, status: "rejected" } });
+    assert.equal((await fetch(`${baseUrl}/v1/admin/cash-out/requests/not-a-uuid/approve`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } })).status, 400);
     const approved = await fetch(`${baseUrl}/v1/admin/partners/${userId}/approve`, { method: "POST", headers: { authorization: "tma admin-telegram-id" } });
     assert.equal(approved.status, 200);
     assert.equal((await approved.json() as { partner: { status: string } }).partner.status, "active");
@@ -292,6 +304,8 @@ test("admin overview is available only to an allowlisted Telegram identity", asy
       { actorTelegramUserId: "admin-telegram-id", action: "partner_risk_updated", subjectUserId: userId },
       { actorTelegramUserId: "admin-telegram-id", action: "partner_cashout_frozen", subjectUserId: userId },
       { actorTelegramUserId: "admin-telegram-id", action: "partner_cashout_unfrozen", subjectUserId: userId },
+      { actorTelegramUserId: "admin-telegram-id", action: "partner_cashout_approved", subjectUserId: userId },
+      { actorTelegramUserId: "admin-telegram-id", action: "partner_cashout_rejected", subjectUserId: userId },
       { actorTelegramUserId: "admin-telegram-id", action: "partner_approval_requested", subjectUserId: userId }
     ]);
   } finally {

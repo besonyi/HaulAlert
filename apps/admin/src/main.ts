@@ -1,4 +1,4 @@
-import { AdminApiClient, AdminApiError, type AdminAuditEvent, type AdminBetaFeedback, type AdminRole, type AdminSearchResults, type AdminSystemOverview, type OperationalCount, type OperationalRecoveryItem } from "./api.js";
+import { AdminApiClient, AdminApiError, type AdminAuditEvent, type AdminBetaFeedback, type AdminCashOutRequest, type AdminRole, type AdminSearchResults, type AdminSystemOverview, type OperationalCount, type OperationalRecoveryItem } from "./api.js";
 import { operationalStatus } from "./operational-status.js";
 
 interface TelegramWebApp {
@@ -23,6 +23,7 @@ const client = telegram?.initData === undefined ? undefined : new AdminApiClient
 let currentOverview: AdminSystemOverview | undefined;
 let auditEvents: readonly AdminAuditEvent[] = [];
 let betaFeedback: readonly AdminBetaFeedback[] = [];
+let cashOutRequests: readonly AdminCashOutRequest[] = [];
 let adminRole: AdminRole | undefined;
 let searchResults: AdminSearchResults | undefined;
 let searchTerm = "";
@@ -36,7 +37,7 @@ async function refresh(): Promise<void> {
   }
   root.innerHTML = loadingMarkup();
   try {
-    [currentOverview, auditEvents, betaFeedback, adminRole] = await Promise.all([client.getOverview(), client.getAuditEvents(), client.getBetaFeedback(), client.getAccess()]);
+    [currentOverview, auditEvents, betaFeedback, cashOutRequests, adminRole] = await Promise.all([client.getOverview(), client.getAuditEvents(), client.getBetaFeedback(), client.getCashOutRequests(), client.getAccess()]);
     renderOverview(currentOverview);
   } catch (error: unknown) {
     renderError(messageFor(error));
@@ -58,6 +59,7 @@ function renderOverview(overview: AdminSystemOverview): void {
       ${group("Delivery outcomes", overview.deliveries, "No delivery outcomes recorded.")}
     </section>
     ${recoveryMarkup(overview.recovery)}
+    ${cashOutReviewMarkup(cashOutRequests)}
     ${feedbackMarkup(betaFeedback)}
     ${auditMarkup(auditEvents)}
     ${searchMarkup()}
@@ -79,6 +81,18 @@ function renderOverview(overview: AdminSystemOverview): void {
   root.querySelectorAll<HTMLButtonElement>("[data-review-feedback]").forEach((button) => {
     button.addEventListener("click", () => { void reviewFeedback(button.dataset.reviewFeedback); });
   });
+  root.querySelectorAll<HTMLButtonElement>("[data-review-cashout-request]").forEach((button) => {
+    button.addEventListener("click", () => { void reviewCashOutRequest(button.dataset.reviewCashoutRequest, button.dataset.reviewCashoutAction); });
+  });
+}
+
+function cashOutReviewMarkup(items: readonly AdminCashOutRequest[]): string {
+  if (items.length === 0) return `<section class="feedback"><h2>Cash-out review</h2><p>No open manual cash-out requests.</p></section>`;
+  return `<section class="feedback"><h2>Cash-out review</h2><p>Approval records a manual decision only. It does not initiate a transfer or contact a payout provider.</p><div class="feedback-list">${items.map((item) => `<article><strong>${escapeHtml(`${item.asset.toUpperCase()} · ${item.network} · ${item.walletDisplay}`)}</strong><p>Customer ${escapeHtml(shortId(item.partnerUserId))} · requested ${escapeHtml(formatCents(item.grossAmountCents))} · receives ${escapeHtml(formatCents(item.netAmountCents))}</p><span>${escapeHtml(formatTime(item.requestedAt))}</span><div class="feedback-actions">${item.status === "requested" && adminRole === "operator" ? `<button type="button" data-review-cashout-request="${escapeHtml(item.id)}" data-review-cashout-action="approve">Approve — no transfer</button><button type="button" data-review-cashout-request="${escapeHtml(item.id)}" data-review-cashout-action="reject">Reject &amp; return balance</button>` : ""}<em>${escapeHtml(cashOutStatusLabel(item.status))}</em></div></article>`).join("")}</div></section>`;
+}
+
+function cashOutStatusLabel(status: AdminCashOutRequest["status"]): string {
+  return status === "requested" ? "Awaiting review" : status === "reviewing" ? "In review" : status === "approved" ? "Approved — awaiting external handling" : "Processing";
 }
 
 function feedbackMarkup(items: readonly AdminBetaFeedback[]): string {
@@ -223,6 +237,22 @@ async function reviewFeedback(feedbackId: string | undefined): Promise<void> {
   renderOverview(currentOverview);
 }
 
+async function reviewCashOutRequest(requestId: string | undefined, action: string | undefined): Promise<void> {
+  if (client === undefined || currentOverview === undefined || requestId === undefined || adminRole !== "operator" || (action !== "approve" && action !== "reject")) return;
+  try {
+    await client.reviewCashOutRequest(requestId, action);
+    [cashOutRequests, auditEvents] = await Promise.all([client.getCashOutRequests(), client.getAuditEvents()]);
+    searchMessage = action === "approve"
+      ? "Cash-out approved for external manual handling. No transfer was initiated."
+      : "Cash-out rejected, reserved balance returned, and decision recorded.";
+  } catch (error: unknown) {
+    searchMessage = error instanceof AdminApiError && error.statusCode === 409
+      ? "This cash-out request is no longer awaiting review."
+      : "Cash-out review could not be completed. Try again shortly.";
+  }
+  renderOverview(currentOverview);
+}
+
 function recoveryItemMarkup(item: OperationalRecoveryItem): string {
   const nextAttempt = item.nextRecoveryAt === null ? "" : `<span>Automatic retry: ${escapeHtml(formatTime(item.nextRecoveryAt))}</span>`;
   return `<article class="recovery-item"><div><strong>${escapeHtml(item.provider)} · ${escapeHtml(item.kind)}</strong><span>${escapeHtml(item.code.replaceAll("_", " ").replaceAll("-", " "))}</span>${nextAttempt}</div><p>${escapeHtml(recoveryAction(item))}</p></article>`;
@@ -244,6 +274,10 @@ function recoveryAction(item: OperationalRecoveryItem): string {
 function formatTime(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function formatCents(value: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value / 100);
 }
 
 function shortId(value: string): string {

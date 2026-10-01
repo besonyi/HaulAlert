@@ -9,7 +9,7 @@ import type {
 } from "./index.js";
 import { InactiveSubscriptionError, PlanLimitExceededError } from "./entitlements.js";
 import { InvalidPartnerCashOutQuoteAmountError } from "./partner-cashout-quote.js";
-import { InvalidPartnerCashOutRequestError, type CreatePartnerCashOutRequestInput } from "./partner-cashout-requests.js";
+import { InvalidPartnerCashOutRequestError, type CashOutReviewAction, type CashOutReviewResult, type CreatePartnerCashOutRequestInput } from "./partner-cashout-requests.js";
 import { StripeCheckoutUnavailableError, SubscriptionAlreadyEssentialError } from "./stripe-billing.js";
 import { InvalidStripeWebhookPayloadError, InvalidStripeWebhookSignatureError } from "./stripe-webhook.js";
 
@@ -49,10 +49,12 @@ export interface MiniAppApiDependencies {
     createCashOutRequest?(input: CreatePartnerCashOutRequestInput): Promise<unknown | undefined>;
     getCashOutRequests?(userId: string): Promise<readonly unknown[]>;
     cancelCashOutRequest?(userId: string, requestId: string): Promise<boolean>;
+    getCashOutRequestsForReview?(): Promise<readonly unknown[]>;
+    reviewCashOutRequest?(requestId: string, action: CashOutReviewAction, reviewerTelegramUserId: string): Promise<CashOutReviewResult | undefined>;
     getLedger?(userId: string): Promise<unknown>;
   };
   readonly audit?: {
-    record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested" | "partner_risk_updated" | "partner_cashout_frozen" | "partner_cashout_unfrozen" | "beta_feedback_reviewed"; readonly subjectUserId: string }): Promise<void>;
+    record(event: { readonly actorTelegramUserId: string; readonly action: "partner_approval_requested" | "partner_risk_updated" | "partner_cashout_frozen" | "partner_cashout_unfrozen" | "partner_cashout_approved" | "partner_cashout_rejected" | "beta_feedback_reviewed"; readonly subjectUserId: string }): Promise<void>;
     getRecent?(): Promise<unknown>;
   };
   readonly billing?: {
@@ -151,6 +153,27 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       return roleFor(dependencies, user) !== undefined
         ? { statusCode: 200, body: { feedback: await dependencies.feedback.getRecent() } }
         : { statusCode: 403, body: { error: "forbidden" } };
+    }
+    if (pathname === "/v1/admin/cash-out/requests" && request.method === "GET") {
+      if (dependencies.partners?.getCashOutRequestsForReview === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
+      return roleFor(dependencies, user) !== undefined
+        ? { statusCode: 200, body: { requests: await dependencies.partners.getCashOutRequestsForReview() } }
+        : { statusCode: 403, body: { error: "forbidden" } };
+    }
+    const cashOutReviewRoute = parseAdminCashOutReviewRoute(pathname);
+    if (cashOutReviewRoute !== undefined && request.method === "POST") {
+      if (dependencies.partners?.reviewCashOutRequest === undefined || !hasAdminAccess(dependencies)) return { statusCode: 404, body: { error: "not_found" } };
+      if (roleFor(dependencies, user) !== "operator") return { statusCode: 403, body: { error: "forbidden" } };
+      if (!isUuid(cashOutReviewRoute.requestId)) return { statusCode: 400, body: { error: "invalid_cashout_request_id" } };
+      const reviewerTelegramUserId = user.telegramUserId ?? user.id;
+      const reviewed = await dependencies.partners.reviewCashOutRequest(cashOutReviewRoute.requestId, cashOutReviewRoute.action, reviewerTelegramUserId);
+      if (reviewed === undefined) return { statusCode: 409, body: { error: "cashout_request_unavailable" } };
+      await dependencies.audit?.record({
+        actorTelegramUserId: reviewerTelegramUserId,
+        action: cashOutReviewRoute.action === "approve" ? "partner_cashout_approved" : "partner_cashout_rejected",
+        subjectUserId: reviewed.partnerUserId
+      });
+      return { statusCode: 200, body: { request: reviewed } };
     }
     const feedbackReviewRoute = parseAdminFeedbackReviewRoute(pathname);
     if (feedbackReviewRoute !== undefined && request.method === "POST") {
@@ -380,6 +403,14 @@ function parsePartnerCashOutRequestCancelRoute(pathname: string): { readonly req
   const segments = pathname.split("/").filter((segment) => segment.length > 0);
   return segments[0] === "v1" && segments[1] === "partner" && segments[2] === "cash-out" && segments[3] === "requests" && segments[5] === "cancel" && segments.length === 6 && segments[4] !== undefined
     ? { requestId: segments[4] }
+    : undefined;
+}
+
+function parseAdminCashOutReviewRoute(pathname: string): { readonly requestId: string; readonly action: CashOutReviewAction } | undefined {
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+  const action = segments[5];
+  return segments[0] === "v1" && segments[1] === "admin" && segments[2] === "cash-out" && segments[3] === "requests" && segments.length === 6 && segments[4] !== undefined && (action === "approve" || action === "reject")
+    ? { requestId: segments[4], action }
     : undefined;
 }
 
