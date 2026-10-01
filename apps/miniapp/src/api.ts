@@ -84,6 +84,14 @@ export interface MiniAppPartnerLedgerEntry {
   readonly createdAt: string;
 }
 
+export interface MiniAppCashOutQuote {
+  readonly grossAmountCents: number;
+  readonly fixedFeeCents: number;
+  readonly processingFeeCents: number;
+  readonly totalFeeCents: number;
+  readonly netAmountCents: number;
+}
+
 export class MiniAppApiError extends Error {
   public constructor(
     readonly statusCode: number,
@@ -139,6 +147,11 @@ export class MiniAppApiClient {
   public async getPartnerEarnings(): Promise<MiniAppPartnerEarnings | null> {
     const response = await this.send("/v1/partner/earnings", "GET");
     return (await response.json() as { earnings: MiniAppPartnerEarnings | null }).earnings;
+  }
+
+  public async quotePartnerCashOut(grossAmountCents: number): Promise<MiniAppCashOutQuote> {
+    const response = await this.send("/v1/partner/cash-out/quote", "POST", { grossAmountCents });
+    return (await response.json() as { quote: MiniAppCashOutQuote }).quote;
   }
 
   public async getPartnerLedger(): Promise<readonly MiniAppPartnerLedgerEntry[]> {

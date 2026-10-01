@@ -141,6 +141,19 @@ test("Mini App API client reads the signed-in partner's ledger only", async () =
   assert.equal(entries[0]?.amountCents, 375);
 });
 
+test("Mini App API client requests a server-calculated cash-out quote", async () => {
+  let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
+  const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {
+    captured = { input, ...(init === undefined ? {} : { init }) };
+    return new Response(JSON.stringify({ quote: { grossAmountCents: 5000, fixedFeeCents: 100, processingFeeCents: 75, totalFeeCents: 175, netAmountCents: 4825 } }));
+  });
+  assert.equal((await client.quotePartnerCashOut(5000)).netAmountCents, 4825);
+  assert.equal(captured?.input, "/api/v1/partner/cash-out/quote");
+  assert.equal(captured?.init?.method, "POST");
+  assert.equal((captured?.init?.headers as Record<string, string>).authorization, "tma signed-init-data");
+  assert.equal(captured?.init?.body, JSON.stringify({ grossAmountCents: 5000 }));
+});
+
 test("Mini App API client starts Essential checkout with the Telegram authorization", async () => {
   let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
   const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {

@@ -8,6 +8,7 @@ import type {
   ManagedAlert
 } from "./index.js";
 import { InactiveSubscriptionError, PlanLimitExceededError } from "./entitlements.js";
+import { InvalidPartnerCashOutQuoteAmountError } from "./partner-cashout-quote.js";
 import { StripeCheckoutUnavailableError, SubscriptionAlreadyEssentialError } from "./stripe-billing.js";
 import { InvalidStripeWebhookPayloadError, InvalidStripeWebhookSignatureError } from "./stripe-webhook.js";
 
@@ -42,6 +43,7 @@ export interface MiniAppApiDependencies {
     freezeCashOut?(userId: string): Promise<boolean>;
     unfreezeCashOut?(userId: string): Promise<boolean>;
     getEarnings?(userId: string): Promise<unknown | undefined>;
+    getCashOutQuote?(userId: string, grossAmountCents: unknown): Promise<unknown | undefined>;
     getLedger?(userId: string): Promise<unknown>;
   };
   readonly audit?: {
@@ -236,6 +238,14 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       if (dependencies.partners?.getEarnings === undefined) return { statusCode: 404, body: { error: "not_found" } };
       return { statusCode: 200, body: { earnings: await dependencies.partners.getEarnings(user.id) } };
     }
+    if (pathname === "/v1/partner/cash-out/quote" && request.method === "POST") {
+      if (dependencies.partners?.getCashOutQuote === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      const body = await parseBody(request);
+      const quote = await dependencies.partners.getCashOutQuote(user.id, body.grossAmountCents);
+      return quote === undefined
+        ? { statusCode: 409, body: { error: "cashout_unavailable" } }
+        : { statusCode: 200, body: { quote } };
+    }
     if (pathname === "/v1/partner/ledger" && request.method === "GET") {
       if (dependencies.partners?.getLedger === undefined) return { statusCode: 404, body: { error: "not_found" } };
       return { statusCode: 200, body: { entries: await dependencies.partners.getLedger(user.id) } };
@@ -295,7 +305,7 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
     if (error instanceof InactiveSubscriptionError) return { statusCode: 403, body: { error: "subscription_inactive" } };
     if (error instanceof SubscriptionAlreadyEssentialError) return { statusCode: 409, body: { error: "already_essential" } };
     if (error instanceof StripeCheckoutUnavailableError) return { statusCode: 503, body: { error: "billing_unavailable" } };
-    if (error instanceof InvalidBodyError || isInputValidationError(error)) {
+    if (error instanceof InvalidBodyError || error instanceof InvalidPartnerCashOutQuoteAmountError || isInputValidationError(error)) {
       return { statusCode: 400, body: { error: "invalid_body" } };
     }
     throw error;

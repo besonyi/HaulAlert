@@ -5,6 +5,7 @@ import {
   MiniAppApiError,
   type MiniAppAlert,
   type MiniAppBrokerProfile,
+  type MiniAppCashOutQuote,
   type MiniAppDashboard,
   type MiniAppEntitlement,
   type MiniAppPartnerEarnings,
@@ -46,6 +47,8 @@ let entitlement: MiniAppEntitlement | undefined;
 let referral: MiniAppReferralSummary | undefined;
 let partnerEarnings: MiniAppPartnerEarnings | null | undefined;
 let partnerLedger: readonly MiniAppPartnerLedgerEntry[] = [];
+let cashOutQuote: MiniAppCashOutQuote | undefined;
+let cashOutQuoteStatus = "";
 let screen: "dashboard" | "create" = "dashboard";
 let editingAlert: MiniAppAlert | undefined;
 let blockedBrokerIds: readonly string[] = [];
@@ -155,7 +158,14 @@ function partnerEarningsMarkup(): string {
   const pending = formatCents(partnerEarnings.pendingCents);
   const available = formatCents(partnerEarnings.availableCents);
   const availability = partnerEarnings.nextAvailableAt === null ? "No commissions are in a hold period." : `Next release: ${formatTime(partnerEarnings.nextAvailableAt)}.`;
-  return `<section class="partner-earnings"><div><p class="eyebrow">PARTNER EARNINGS</p><h2>${escapeHtml(partnerEarnings.status === "active" ? "Commission balance" : "Partner review")}</h2></div><p>${escapeHtml(partnerEarnings.status === "active" ? `${rate} · ${partnerEarnings.holdDays}-day hold before availability.` : "Your Partner account is not active, so commissions are not available for payout.")}</p><div class="partner-earnings-stats"><span><strong>${escapeHtml(pending)}</strong> pending</span><span><strong>${escapeHtml(available)}</strong> available</span><span><strong>${escapeHtml(formatCents(partnerEarnings.lifetimeEarnedCents))}</strong> lifetime</span></div><p class="cashout-readiness">${escapeHtml(cashOutReadiness(partnerEarnings))}</p>${partnerLedgerMarkup()}<small>${escapeHtml(availability)} Cash-out requests are not available yet.</small></section>`;
+  return `<section class="partner-earnings"><div><p class="eyebrow">PARTNER EARNINGS</p><h2>${escapeHtml(partnerEarnings.status === "active" ? "Commission balance" : "Partner review")}</h2></div><p>${escapeHtml(partnerEarnings.status === "active" ? `${rate} · ${partnerEarnings.holdDays}-day hold before availability.` : "Your Partner account is not active, so commissions are not available for payout.")}</p><div class="partner-earnings-stats"><span><strong>${escapeHtml(pending)}</strong> pending</span><span><strong>${escapeHtml(available)}</strong> available</span><span><strong>${escapeHtml(formatCents(partnerEarnings.lifetimeEarnedCents))}</strong> lifetime</span></div><p class="cashout-readiness">${escapeHtml(cashOutReadiness(partnerEarnings))}</p>${cashOutQuoteMarkup(partnerEarnings)}${partnerLedgerMarkup()}<small>${escapeHtml(availability)} Cash-out requests will require a supported asset, network, and manual review before any payout is enabled.</small></section>`;
+}
+
+function cashOutQuoteMarkup(earnings: MiniAppPartnerEarnings): string {
+  if (!earnings.cashOutEligible) return "";
+  const amount = cashOutQuote === undefined ? "" : (cashOutQuote.grossAmountCents / 100).toFixed(2);
+  const quote = cashOutQuote === undefined ? "" : `<dl class="cashout-quote"><div><dt>Withdrawal amount</dt><dd>${escapeHtml(formatCents(cashOutQuote.grossAmountCents))}</dd></div><div><dt>Network &amp; Processing Fee</dt><dd>-${escapeHtml(formatCents(cashOutQuote.totalFeeCents))}</dd></div><div><dt>You receive</dt><dd>${escapeHtml(formatCents(cashOutQuote.netAmountCents))}</dd></div></dl>`;
+  return `<form class="cashout-quote-form" data-cashout-quote><label>Preview cash-out amount (USD)<input name="amount" inputmode="decimal" pattern="[0-9]+(\\.[0-9]{1,2})?" placeholder="50.00" value="${escapeHtml(amount)}" required /></label><button class="secondary" type="submit">Calculate fee</button></form>${quote}${cashOutQuoteStatus ? `<p class="cashout-quote-status" role="status">${escapeHtml(cashOutQuoteStatus)}</p>` : ""}`;
 }
 
 function cashOutReadiness(earnings: MiniAppPartnerEarnings): string {
@@ -332,7 +342,40 @@ function bindInteractions(): void {
   app.querySelector<HTMLButtonElement>("[data-share-referral]")?.addEventListener("click", () => { void shareReferralLink(); });
   app.querySelector<HTMLButtonElement>("[data-copy-referral]")?.addEventListener("click", () => { void copyReferralLink(); });
   app.querySelector<HTMLFormElement>("[data-feedback]")?.addEventListener("submit", (event) => { void submitFeedback(event); });
+  app.querySelector<HTMLFormElement>("[data-cashout-quote]")?.addEventListener("submit", (event) => { void quoteCashOut(event); });
   app.querySelector<HTMLButtonElement>("[data-refresh]")?.addEventListener("click", () => { void refresh(); });
+}
+
+async function quoteCashOut(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (client === undefined || !(form instanceof HTMLFormElement)) return;
+  const grossAmountCents = parseDollarCents(String(new FormData(form).get("amount") ?? ""));
+  if (grossAmountCents === undefined) {
+    cashOutQuote = undefined;
+    cashOutQuoteStatus = "Enter a whole-dollar or cents amount, for example 50.00.";
+    render();
+    return;
+  }
+  try {
+    cashOutQuote = await client.quotePartnerCashOut(grossAmountCents);
+    cashOutQuoteStatus = "This is a fee preview only; it does not create a withdrawal request.";
+  } catch (error: unknown) {
+    cashOutQuote = undefined;
+    cashOutQuoteStatus = error instanceof MiniAppApiError && error.statusCode === 409
+      ? "That amount is not currently available for cash-out."
+      : readableError(error);
+  }
+  render();
+}
+
+function parseDollarCents(value: string): number | undefined {
+  const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,2}))?$/.exec(value.trim());
+  if (match === null) return undefined;
+  const dollars = Number(match[1]);
+  const cents = Number((match[2] ?? "").padEnd(2, "0"));
+  const result = dollars * 100 + cents;
+  return Number.isSafeInteger(result) ? result : undefined;
 }
 
 async function submitFeedback(event: SubmitEvent): Promise<void> {

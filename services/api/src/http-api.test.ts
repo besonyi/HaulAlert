@@ -353,7 +353,7 @@ test("authenticated customers can submit bounded beta feedback", async () => {
   }
 });
 
-test("authenticated customers can read only their own partner earnings", async () => {
+test("authenticated customers can read only their own partner earnings and quote cash-out", async () => {
   const received: Array<{ readonly kind: string; readonly userId: string }> = [];
   const server = createMiniAppApiServer({
     alerts: {} as AlertManagementRepository,
@@ -363,6 +363,10 @@ test("authenticated customers can read only their own partner earnings", async (
       getEarnings: async (userId) => {
         received.push({ kind: "earnings", userId });
         return { status: "active", pendingCents: 375, availableCents: 750 };
+      },
+      getCashOutQuote: async (userId, grossAmountCents) => {
+        received.push({ kind: `quote:${grossAmountCents}`, userId });
+        return grossAmountCents === 5_000 ? { grossAmountCents: 5_000, totalFeeCents: 175, netAmountCents: 4_825 } : undefined;
       },
       getLedger: async (userId) => {
         received.push({ kind: "ledger", userId });
@@ -379,10 +383,23 @@ test("authenticated customers can read only their own partner earnings", async (
     const response = await fetch(`http://127.0.0.1:${address.port}/v1/partner/earnings`, { headers: { authorization: "tma verified" } });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { earnings: { status: "active", pendingCents: 375, availableCents: 750 } });
+    const quote = await fetch(`http://127.0.0.1:${address.port}/v1/partner/cash-out/quote`, {
+      method: "POST", headers: { authorization: "tma verified", "content-type": "application/json" }, body: JSON.stringify({ grossAmountCents: 5_000 })
+    });
+    assert.equal(quote.status, 200);
+    assert.deepEqual(await quote.json(), { quote: { grossAmountCents: 5_000, totalFeeCents: 175, netAmountCents: 4_825 } });
+    assert.equal((await fetch(`http://127.0.0.1:${address.port}/v1/partner/cash-out/quote`, {
+      method: "POST", headers: { authorization: "tma verified", "content-type": "application/json" }, body: JSON.stringify({ grossAmountCents: 7_500 })
+    })).status, 409);
     const ledger = await fetch(`http://127.0.0.1:${address.port}/v1/partner/ledger`, { headers: { authorization: "tma verified" } });
     assert.equal(ledger.status, 200);
     assert.deepEqual(await ledger.json(), { entries: [{ id: "entry-1", entryType: "commission_available", amountCents: 750 }] });
-    assert.deepEqual(received, [{ kind: "earnings", userId: "user-verified" }, { kind: "ledger", userId: "user-verified" }]);
+    assert.deepEqual(received, [
+      { kind: "earnings", userId: "user-verified" },
+      { kind: "quote:5000", userId: "user-verified" },
+      { kind: "quote:7500", userId: "user-verified" },
+      { kind: "ledger", userId: "user-verified" }
+    ]);
   } finally {
     await new Promise<void>((resolveClosing, reject) => server.close((error) => error === undefined ? resolveClosing() : reject(error)));
   }
