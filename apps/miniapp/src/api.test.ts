@@ -158,16 +158,23 @@ test("Mini App API client reads enabled methods and creates a manual cash-out re
   const requests: Array<{ input: string; body: string | undefined }> = [];
   const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {
     requests.push({ input: String(input), body: typeof init?.body === "string" ? init.body : undefined });
-    return new Response(JSON.stringify(String(input).endsWith("/methods")
+    const path = String(input);
+    return new Response(JSON.stringify(path.endsWith("/methods")
       ? { methods: [{ asset: "usdt", network: "tron" }] }
-      : { request: { id: "request-1", asset: "usdt", network: "tron", status: "requested" } }
+      : path.endsWith("/requests") && init?.method === "GET"
+        ? { requests: [{ id: "request-1", asset: "usdt", network: "tron", status: "requested" }] }
+        : { request: { id: "request-1", asset: "usdt", network: "tron", status: "requested" } }
     ));
   });
   assert.deepEqual(await client.getCashOutMethods(), [{ asset: "usdt", network: "tron" }]);
   assert.equal((await client.createPartnerCashOutRequest({ asset: "usdt", network: "tron", walletAddress: "TQ5TzYjD4Qh9nk7qA4f8NBxYz3xF5W9K8L", grossAmountCents: 5000 })).status, "requested");
+  assert.equal((await client.getPartnerCashOutRequests())[0]?.id, "request-1");
+  await client.cancelPartnerCashOutRequest("request-1");
   assert.deepEqual(requests, [
     { input: "/api/v1/partner/cash-out/methods", body: undefined },
-    { input: "/api/v1/partner/cash-out/requests", body: JSON.stringify({ asset: "usdt", network: "tron", walletAddress: "TQ5TzYjD4Qh9nk7qA4f8NBxYz3xF5W9K8L", grossAmountCents: 5000 }) }
+    { input: "/api/v1/partner/cash-out/requests", body: JSON.stringify({ asset: "usdt", network: "tron", walletAddress: "TQ5TzYjD4Qh9nk7qA4f8NBxYz3xF5W9K8L", grossAmountCents: 5000 }) },
+    { input: "/api/v1/partner/cash-out/requests", body: undefined },
+    { input: "/api/v1/partner/cash-out/requests/request-1/cancel", body: undefined }
   ]);
 });
 

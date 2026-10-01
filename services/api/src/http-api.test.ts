@@ -375,6 +375,14 @@ test("authenticated customers can read only their own partner earnings and quote
           ? { id: "request-1", asset: "usdt", network: "tron", walletDisplay: "TQ5TzY…9K8L", status: "requested" }
           : undefined;
       },
+      getCashOutRequests: async (userId) => {
+        received.push({ kind: "requests", userId });
+        return [{ id: "11111111-1111-4111-8111-111111111111", asset: "usdt", network: "tron", walletDisplay: "TQ5TzY…9K8L", status: "requested" }];
+      },
+      cancelCashOutRequest: async (userId, requestId) => {
+        received.push({ kind: `cancel:${requestId}`, userId });
+        return requestId === "11111111-1111-4111-8111-111111111111";
+      },
       getLedger: async (userId) => {
         received.push({ kind: "ledger", userId });
         return [{ id: "entry-1", entryType: "commission_available", amountCents: 750 }];
@@ -406,6 +414,15 @@ test("authenticated customers can read only their own partner earnings and quote
     });
     assert.equal(cashOutRequest.status, 201);
     assert.deepEqual(await cashOutRequest.json(), { request: { id: "request-1", asset: "usdt", network: "tron", walletDisplay: "TQ5TzY…9K8L", status: "requested" } });
+    const cashOutRequests = await fetch(`http://127.0.0.1:${address.port}/v1/partner/cash-out/requests`, { headers: { authorization: "tma verified" } });
+    assert.deepEqual(await cashOutRequests.json(), { requests: [{ id: "11111111-1111-4111-8111-111111111111", asset: "usdt", network: "tron", walletDisplay: "TQ5TzY…9K8L", status: "requested" }] });
+    const cancellation = await fetch(`http://127.0.0.1:${address.port}/v1/partner/cash-out/requests/11111111-1111-4111-8111-111111111111/cancel`, {
+      method: "POST", headers: { authorization: "tma verified" }
+    });
+    assert.deepEqual(await cancellation.json(), { status: "cancelled" });
+    assert.equal((await fetch(`http://127.0.0.1:${address.port}/v1/partner/cash-out/requests/not-a-uuid/cancel`, {
+      method: "POST", headers: { authorization: "tma verified" }
+    })).status, 400);
     const ledger = await fetch(`http://127.0.0.1:${address.port}/v1/partner/ledger`, { headers: { authorization: "tma verified" } });
     assert.equal(ledger.status, 200);
     assert.deepEqual(await ledger.json(), { entries: [{ id: "entry-1", entryType: "commission_available", amountCents: 750 }] });
@@ -414,6 +431,8 @@ test("authenticated customers can read only their own partner earnings and quote
       { kind: "quote:5000", userId: "user-verified" },
       { kind: "quote:7500", userId: "user-verified" },
       { kind: "request:5000", userId: "user-verified" },
+      { kind: "requests", userId: "user-verified" },
+      { kind: "cancel:11111111-1111-4111-8111-111111111111", userId: "user-verified" },
       { kind: "ledger", userId: "user-verified" }
     ]);
   } finally {

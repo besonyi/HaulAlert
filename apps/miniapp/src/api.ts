@@ -79,7 +79,7 @@ export interface MiniAppPartnerEarnings {
 
 export interface MiniAppPartnerLedgerEntry {
   readonly id: string;
-  readonly entryType: "commission_available" | "refund_reversal" | "chargeback_clawback" | "withdrawal" | "cashout_fee" | "manual_adjustment";
+  readonly entryType: "commission_available" | "refund_reversal" | "chargeback_clawback" | "withdrawal" | "cashout_fee" | "cashout_reversal" | "manual_adjustment";
   readonly amountCents: number;
   readonly createdAt: string;
 }
@@ -105,7 +105,7 @@ export interface MiniAppPartnerCashOutRequest {
   readonly grossAmountCents: number;
   readonly totalFeeCents: number;
   readonly netAmountCents: number;
-  readonly status: "requested";
+  readonly status: "requested" | "reviewing" | "approved" | "processing" | "completed" | "rejected" | "cancelled" | "failed" | "frozen";
   readonly manualReviewRequired: boolean;
   readonly requestedAt: string;
 }
@@ -180,6 +180,15 @@ export class MiniAppApiClient {
   public async createPartnerCashOutRequest(input: { readonly asset: string; readonly network: string; readonly walletAddress: string; readonly grossAmountCents: number }): Promise<MiniAppPartnerCashOutRequest> {
     const response = await this.send("/v1/partner/cash-out/requests", "POST", input);
     return (await response.json() as { request: MiniAppPartnerCashOutRequest }).request;
+  }
+
+  public async getPartnerCashOutRequests(): Promise<readonly MiniAppPartnerCashOutRequest[]> {
+    const response = await this.send("/v1/partner/cash-out/requests", "GET");
+    return (await response.json() as { requests: MiniAppPartnerCashOutRequest[] }).requests;
+  }
+
+  public async cancelPartnerCashOutRequest(requestId: string): Promise<void> {
+    await this.send(`/v1/partner/cash-out/requests/${encodeURIComponent(requestId)}/cancel`, "POST");
   }
 
   public async getPartnerLedger(): Promise<readonly MiniAppPartnerLedgerEntry[]> {

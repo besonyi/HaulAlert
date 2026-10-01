@@ -47,6 +47,8 @@ export interface MiniAppApiDependencies {
     getCashOutQuote?(userId: string, grossAmountCents: unknown): Promise<unknown | undefined>;
     getCashOutMethods?(): readonly unknown[];
     createCashOutRequest?(input: CreatePartnerCashOutRequestInput): Promise<unknown | undefined>;
+    getCashOutRequests?(userId: string): Promise<readonly unknown[]>;
+    cancelCashOutRequest?(userId: string, requestId: string): Promise<boolean>;
     getLedger?(userId: string): Promise<unknown>;
   };
   readonly audit?: {
@@ -261,7 +263,20 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
       });
       return requestItem === undefined
         ? { statusCode: 409, body: { error: "cashout_unavailable" } }
-        : { statusCode: 201, body: { request: requestItem } };
+         : { statusCode: 201, body: { request: requestItem } };
+    }
+    if (pathname === "/v1/partner/cash-out/requests" && request.method === "GET") {
+      if (dependencies.partners?.getCashOutRequests === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      return { statusCode: 200, body: { requests: await dependencies.partners.getCashOutRequests(user.id) } };
+    }
+    const cashOutRequestCancelRoute = parsePartnerCashOutRequestCancelRoute(pathname);
+    if (cashOutRequestCancelRoute !== undefined && request.method === "POST") {
+      if (dependencies.partners?.cancelCashOutRequest === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      if (!isUuid(cashOutRequestCancelRoute.requestId)) return { statusCode: 400, body: { error: "invalid_cashout_request_id" } };
+      const cancelled = await dependencies.partners.cancelCashOutRequest(user.id, cashOutRequestCancelRoute.requestId);
+      return cancelled
+        ? { statusCode: 200, body: { status: "cancelled" } }
+        : { statusCode: 409, body: { error: "cashout_request_unavailable" } };
     }
     if (pathname === "/v1/partner/ledger" && request.method === "GET") {
       if (dependencies.partners?.getLedger === undefined) return { statusCode: 404, body: { error: "not_found" } };
@@ -359,6 +374,13 @@ async function readRawBody(request: IncomingMessage): Promise<Buffer> {
     chunks.push(buffer);
   }
   return Buffer.concat(chunks);
+}
+
+function parsePartnerCashOutRequestCancelRoute(pathname: string): { readonly requestId: string } | undefined {
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+  return segments[0] === "v1" && segments[1] === "partner" && segments[2] === "cash-out" && segments[3] === "requests" && segments[5] === "cancel" && segments.length === 6 && segments[4] !== undefined
+    ? { requestId: segments[4] }
+    : undefined;
 }
 
 function parseAlertRoute(pathname: string): { readonly alertId: string; readonly action: "root" | "pause" | "resume" | "duplicate" } | undefined {

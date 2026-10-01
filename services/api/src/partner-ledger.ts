@@ -1,6 +1,6 @@
 import type { SqlExecutor } from "@haulalert/notification-service";
 
-export type PartnerLedgerEntryType = "commission_available" | "refund_reversal" | "chargeback_clawback" | "withdrawal" | "cashout_fee" | "manual_adjustment";
+export type PartnerLedgerEntryType = "commission_available" | "refund_reversal" | "chargeback_clawback" | "withdrawal" | "cashout_fee" | "cashout_reversal" | "manual_adjustment";
 
 export interface PartnerLedgerEntry {
   readonly id: string;
@@ -39,7 +39,7 @@ function entry(row: Record<string, unknown>): PartnerLedgerEntry {
 }
 
 function entryType(value: unknown): PartnerLedgerEntryType {
-  if (value === "commission_available" || value === "refund_reversal" || value === "chargeback_clawback" || value === "withdrawal" || value === "cashout_fee" || value === "manual_adjustment") return value;
+  if (value === "commission_available" || value === "refund_reversal" || value === "chargeback_clawback" || value === "withdrawal" || value === "cashout_fee" || value === "cashout_reversal" || value === "manual_adjustment") return value;
   throw new Error("Expected partner ledger entry type");
 }
 

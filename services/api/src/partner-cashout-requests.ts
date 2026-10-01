@@ -23,10 +23,12 @@ export interface PartnerCashOutRequest {
   readonly grossAmountCents: number;
   readonly totalFeeCents: number;
   readonly netAmountCents: number;
-  readonly status: "requested";
+  readonly status: PartnerCashOutRequestStatus;
   readonly manualReviewRequired: boolean;
   readonly requestedAt: string;
 }
+
+export type PartnerCashOutRequestStatus = "requested" | "reviewing" | "approved" | "processing" | "completed" | "rejected" | "cancelled" | "failed" | "frozen";
 
 export class InvalidPartnerCashOutRequestError extends Error {}
 
@@ -92,6 +94,42 @@ export class PostgresPartnerCashOutRequestRepository {
     return row === undefined ? undefined : request(row);
   }
 
+  /** Returns the signed-in partner's recent cash-out history with wallets masked. */
+  public async listForUser(userId: string, limit: number = 20): Promise<readonly PartnerCashOutRequest[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Cash-out request limit must be an integer between 1 and 100");
+    const result = await this.database.query(
+      `SELECT id, asset, network, wallet_address, gross_amount_cents, total_fee_cents, net_amount_cents, status, manual_review_required, requested_at
+      FROM partner_cashout_requests
+      WHERE partner_user_id = $1::uuid
+      ORDER BY requested_at DESC, id DESC
+      LIMIT $2`,
+      [userId, limit]
+    );
+    return result.rows.map(request);
+  }
+
+  /** Cancels a not-yet-reviewed request and restores its immutable ledger reservation. */
+  public async cancelForUser(userId: string, requestId: string): Promise<boolean> {
+    const result = await this.database.query(
+      `WITH cancelled_request AS (
+        UPDATE partner_cashout_requests
+        SET status = 'cancelled'
+        WHERE id = $1::uuid AND partner_user_id = $2::uuid AND status = 'requested'
+        RETURNING id, partner_account_id, partner_user_id, gross_amount_cents
+      ), restored_balance AS (
+        INSERT INTO partner_ledger_entries (
+          partner_account_id, partner_user_id, cashout_request_id, entry_type, amount_cents
+        )
+        SELECT partner_account_id, partner_user_id, id, 'cashout_reversal', gross_amount_cents
+        FROM cancelled_request
+        RETURNING id
+      )
+      SELECT id FROM cancelled_request`,
+      [requestId, userId]
+    );
+    return result.rows.length === 1;
+  }
+
   private method(assetValue: unknown, networkValue: unknown): CashOutMethod {
     const asset = typeof assetValue === "string" ? assetValue.trim().toLowerCase() : "";
     const network = typeof networkValue === "string" ? networkValue.trim().toLowerCase() : "";
@@ -115,7 +153,7 @@ export function parseCashOutMethods(value: string | undefined): readonly CashOut
 }
 
 function request(row: Record<string, unknown>): PartnerCashOutRequest {
-  const status = row.status === "requested" ? row.status : invalid("Expected cash-out request status");
+  const status = requestStatus(row.status);
   return {
     id: uuid(row.id), asset: asset(row.asset), network: network(row.network), walletDisplay: walletDisplay(row.wallet_address),
     grossAmountCents: positiveCents(row.gross_amount_cents), totalFeeCents: positiveCents(row.total_fee_cents), netAmountCents: positiveCents(row.net_amount_cents),
@@ -134,6 +172,10 @@ function walletDisplay(value: unknown): string {
 }
 
 function methodKey(method: CashOutMethod): string { return `${method.asset}:${method.network}`; }
+function requestStatus(value: unknown): PartnerCashOutRequestStatus {
+  if (value === "requested" || value === "reviewing" || value === "approved" || value === "processing" || value === "completed" || value === "rejected" || value === "cancelled" || value === "failed" || value === "frozen") return value;
+  return invalid("Expected cash-out request status");
+}
 function asset(value: unknown): "usdt" | "usdc" { return value === "usdt" || value === "usdc" ? value : invalid("Expected cash-out asset"); }
 function network(value: unknown): string { return typeof value === "string" && /^[a-z0-9][a-z0-9_-]{1,39}$/.test(value) ? value : invalid("Expected cash-out network"); }
 function uuid(value: unknown): string { return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) ? value : invalid("Expected cash-out request ID"); }
