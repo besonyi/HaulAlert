@@ -98,7 +98,7 @@ for protected actions.
 ## Recovery and rollback checks
 
 Before a production release, confirm that all database migrations through
-`0019_partner_cashout_holds.sql` have been applied, then verify the API readiness and
+`0020_partner_cashout_requests.sql` have been applied, then verify the API readiness and
 Bot liveness probes. If a release causes a customer-impacting regression,
 return to the last known-good application revision while preserving PostgreSQL
 data. Database migrations are forward-only: do not roll back schema by deleting

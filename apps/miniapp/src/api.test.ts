@@ -154,6 +154,23 @@ test("Mini App API client requests a server-calculated cash-out quote", async ()
   assert.equal(captured?.init?.body, JSON.stringify({ grossAmountCents: 5000 }));
 });
 
+test("Mini App API client reads enabled methods and creates a manual cash-out request", async () => {
+  const requests: Array<{ input: string; body: string | undefined }> = [];
+  const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {
+    requests.push({ input: String(input), body: typeof init?.body === "string" ? init.body : undefined });
+    return new Response(JSON.stringify(String(input).endsWith("/methods")
+      ? { methods: [{ asset: "usdt", network: "tron" }] }
+      : { request: { id: "request-1", asset: "usdt", network: "tron", status: "requested" } }
+    ));
+  });
+  assert.deepEqual(await client.getCashOutMethods(), [{ asset: "usdt", network: "tron" }]);
+  assert.equal((await client.createPartnerCashOutRequest({ asset: "usdt", network: "tron", walletAddress: "TQ5TzYjD4Qh9nk7qA4f8NBxYz3xF5W9K8L", grossAmountCents: 5000 })).status, "requested");
+  assert.deepEqual(requests, [
+    { input: "/api/v1/partner/cash-out/methods", body: undefined },
+    { input: "/api/v1/partner/cash-out/requests", body: JSON.stringify({ asset: "usdt", network: "tron", walletAddress: "TQ5TzYjD4Qh9nk7qA4f8NBxYz3xF5W9K8L", grossAmountCents: 5000 }) }
+  ]);
+});
+
 test("Mini App API client starts Essential checkout with the Telegram authorization", async () => {
   let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
   const client = new MiniAppApiClient("signed-init-data", "/api", async (input, init) => {

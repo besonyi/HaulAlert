@@ -6,7 +6,7 @@ import { Pool } from "pg";
 import { getDatabaseUrl, getTelegramBotToken, PgPoolSqlExecutor } from "@haulalert/notification-service";
 
 import { createMiniAppApiServer } from "./http-api.js";
-import { getAdminAccessConfig, getAdminRole, PartnerCashOutQuoteService, PostgresAdminAuditRepository, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBetaFeedbackRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresPartnerCashOutHoldRepository, PostgresPartnerEarningsRepository, PostgresPartnerLedgerRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresSubscriptionPortalService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type AdminAccessConfig, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
+import { getAdminAccessConfig, getAdminRole, parseCashOutMethods, PartnerCashOutQuoteService, PostgresAdminAuditRepository, PostgresAdminDashboardRepository, PostgresAdminSearchRepository, PostgresAlertRepository, PostgresBetaFeedbackRepository, PostgresBrokerDirectoryRepository, PostgresDashboardRepository, PostgresEntitlementRepository, PostgresPartnerAccountRepository, PostgresPartnerCashOutHoldRepository, PostgresPartnerCashOutRequestRepository, PostgresPartnerEarningsRepository, PostgresPartnerLedgerRepository, PostgresReferralRepository, PostgresStripeWebhookEventProcessor, PostgresSubscriptionCheckoutService, PostgresSubscriptionPortalService, PostgresTelegramUserResolver, StripeCheckoutClient, StripeWebhookHandler, type AdminAccessConfig, type CashOutMethod, type ReferralSummary, type StripeCheckoutConfig } from "./index.js";
 import { verifyTelegramMiniAppInitData } from "./telegram-miniapp-auth.js";
 
 export interface ApiServerConfig {
@@ -17,6 +17,7 @@ export interface ApiServerConfig {
   readonly telegramBotUsername: string;
   readonly stripeWebhookSecret: string | undefined;
   readonly stripeCheckout: StripeCheckoutConfig | undefined;
+  readonly cashOutMethods: readonly CashOutMethod[];
 }
 
 export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env): ApiServerConfig {
@@ -27,7 +28,8 @@ export function getApiServerConfig(environment: NodeJS.ProcessEnv = process.env)
     adminAccess: getAdminAccessConfig(environment),
     telegramBotUsername: getTelegramBotUsername(environment.TELEGRAM_BOT_USERNAME),
     stripeWebhookSecret: optionalStripeWebhookSecret(environment.STRIPE_WEBHOOK_SECRET),
-    stripeCheckout: optionalStripeCheckoutConfig(environment)
+    stripeCheckout: optionalStripeCheckoutConfig(environment),
+    cashOutMethods: parseCashOutMethods(environment.CASHOUT_SUPPORTED_METHODS)
   };
 }
 
@@ -39,6 +41,7 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
   const partners = new PostgresPartnerAccountRepository(database);
   const partnerEarnings = new PostgresPartnerEarningsRepository(database);
   const partnerCashOutQuotes = new PartnerCashOutQuoteService(partnerEarnings);
+  const partnerCashOutRequests = new PostgresPartnerCashOutRequestRepository(database, config.cashOutMethods);
   const partnerCashOutHolds = new PostgresPartnerCashOutHoldRepository(database);
   const partnerLedger = new PostgresPartnerLedgerRepository(database);
   const audit = new PostgresAdminAuditRepository(database);
@@ -63,7 +66,7 @@ export async function runApiServer(config: ApiServerConfig = getApiServerConfig(
         config.telegramBotUsername
       )
     },
-    partners: { approve: (userId) => partners.approve(userId), setRiskLevel: (userId, riskLevel) => partners.setRiskLevel(userId, riskLevel), getEarnings: (userId) => partnerEarnings.getForUser(userId), getCashOutQuote: (userId, grossAmountCents) => partnerCashOutQuotes.quoteForUser(userId, grossAmountCents), getLedger: (userId) => partnerLedger.listForUser(userId), freezeCashOut: (userId) => partnerCashOutHolds.freeze(userId), unfreezeCashOut: (userId) => partnerCashOutHolds.unfreeze(userId) },
+    partners: { approve: (userId) => partners.approve(userId), setRiskLevel: (userId, riskLevel) => partners.setRiskLevel(userId, riskLevel), getEarnings: (userId) => partnerEarnings.getForUser(userId), getCashOutQuote: (userId, grossAmountCents) => partnerCashOutQuotes.quoteForUser(userId, grossAmountCents), getCashOutMethods: () => partnerCashOutRequests.getMethods(), createCashOutRequest: (input) => partnerCashOutRequests.createForUser(input), getLedger: (userId) => partnerLedger.listForUser(userId), freezeCashOut: (userId) => partnerCashOutHolds.freeze(userId), unfreezeCashOut: (userId) => partnerCashOutHolds.unfreeze(userId) },
     audit,
     ...(billing === undefined ? {} : { billing }),
     ...(config.stripeWebhookSecret === undefined ? {} : {

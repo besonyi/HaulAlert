@@ -9,6 +9,7 @@ import type {
 } from "./index.js";
 import { InactiveSubscriptionError, PlanLimitExceededError } from "./entitlements.js";
 import { InvalidPartnerCashOutQuoteAmountError } from "./partner-cashout-quote.js";
+import { InvalidPartnerCashOutRequestError, type CreatePartnerCashOutRequestInput } from "./partner-cashout-requests.js";
 import { StripeCheckoutUnavailableError, SubscriptionAlreadyEssentialError } from "./stripe-billing.js";
 import { InvalidStripeWebhookPayloadError, InvalidStripeWebhookSignatureError } from "./stripe-webhook.js";
 
@@ -44,6 +45,8 @@ export interface MiniAppApiDependencies {
     unfreezeCashOut?(userId: string): Promise<boolean>;
     getEarnings?(userId: string): Promise<unknown | undefined>;
     getCashOutQuote?(userId: string, grossAmountCents: unknown): Promise<unknown | undefined>;
+    getCashOutMethods?(): readonly unknown[];
+    createCashOutRequest?(input: CreatePartnerCashOutRequestInput): Promise<unknown | undefined>;
     getLedger?(userId: string): Promise<unknown>;
   };
   readonly audit?: {
@@ -246,6 +249,20 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
         ? { statusCode: 409, body: { error: "cashout_unavailable" } }
         : { statusCode: 200, body: { quote } };
     }
+    if (pathname === "/v1/partner/cash-out/methods" && request.method === "GET") {
+      if (dependencies.partners?.getCashOutMethods === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      return { statusCode: 200, body: { methods: dependencies.partners.getCashOutMethods() } };
+    }
+    if (pathname === "/v1/partner/cash-out/requests" && request.method === "POST") {
+      if (dependencies.partners?.createCashOutRequest === undefined) return { statusCode: 404, body: { error: "not_found" } };
+      const body = await parseBody(request);
+      const requestItem = await dependencies.partners.createCashOutRequest({
+        userId: user.id, asset: body.asset, network: body.network, walletAddress: body.walletAddress, grossAmountCents: body.grossAmountCents
+      });
+      return requestItem === undefined
+        ? { statusCode: 409, body: { error: "cashout_unavailable" } }
+        : { statusCode: 201, body: { request: requestItem } };
+    }
     if (pathname === "/v1/partner/ledger" && request.method === "GET") {
       if (dependencies.partners?.getLedger === undefined) return { statusCode: 404, body: { error: "not_found" } };
       return { statusCode: 200, body: { entries: await dependencies.partners.getLedger(user.id) } };
@@ -305,7 +322,7 @@ async function handleRequest(request: IncomingMessage, dependencies: MiniAppApiD
     if (error instanceof InactiveSubscriptionError) return { statusCode: 403, body: { error: "subscription_inactive" } };
     if (error instanceof SubscriptionAlreadyEssentialError) return { statusCode: 409, body: { error: "already_essential" } };
     if (error instanceof StripeCheckoutUnavailableError) return { statusCode: 503, body: { error: "billing_unavailable" } };
-    if (error instanceof InvalidBodyError || error instanceof InvalidPartnerCashOutQuoteAmountError || isInputValidationError(error)) {
+    if (error instanceof InvalidBodyError || error instanceof InvalidPartnerCashOutQuoteAmountError || error instanceof InvalidPartnerCashOutRequestError || isInputValidationError(error)) {
       return { statusCode: 400, body: { error: "invalid_body" } };
     }
     throw error;

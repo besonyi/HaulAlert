@@ -92,6 +92,24 @@ export interface MiniAppCashOutQuote {
   readonly netAmountCents: number;
 }
 
+export interface MiniAppCashOutMethod {
+  readonly asset: "usdt" | "usdc";
+  readonly network: string;
+}
+
+export interface MiniAppPartnerCashOutRequest {
+  readonly id: string;
+  readonly asset: "usdt" | "usdc";
+  readonly network: string;
+  readonly walletDisplay: string;
+  readonly grossAmountCents: number;
+  readonly totalFeeCents: number;
+  readonly netAmountCents: number;
+  readonly status: "requested";
+  readonly manualReviewRequired: boolean;
+  readonly requestedAt: string;
+}
+
 export class MiniAppApiError extends Error {
   public constructor(
     readonly statusCode: number,
@@ -152,6 +170,16 @@ export class MiniAppApiClient {
   public async quotePartnerCashOut(grossAmountCents: number): Promise<MiniAppCashOutQuote> {
     const response = await this.send("/v1/partner/cash-out/quote", "POST", { grossAmountCents });
     return (await response.json() as { quote: MiniAppCashOutQuote }).quote;
+  }
+
+  public async getCashOutMethods(): Promise<readonly MiniAppCashOutMethod[]> {
+    const response = await this.send("/v1/partner/cash-out/methods", "GET");
+    return (await response.json() as { methods: MiniAppCashOutMethod[] }).methods;
+  }
+
+  public async createPartnerCashOutRequest(input: { readonly asset: string; readonly network: string; readonly walletAddress: string; readonly grossAmountCents: number }): Promise<MiniAppPartnerCashOutRequest> {
+    const response = await this.send("/v1/partner/cash-out/requests", "POST", input);
+    return (await response.json() as { request: MiniAppPartnerCashOutRequest }).request;
   }
 
   public async getPartnerLedger(): Promise<readonly MiniAppPartnerLedgerEntry[]> {

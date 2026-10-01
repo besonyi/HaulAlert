@@ -5,6 +5,7 @@ import {
   MiniAppApiError,
   type MiniAppAlert,
   type MiniAppBrokerProfile,
+  type MiniAppCashOutMethod,
   type MiniAppCashOutQuote,
   type MiniAppDashboard,
   type MiniAppEntitlement,
@@ -49,6 +50,8 @@ let partnerEarnings: MiniAppPartnerEarnings | null | undefined;
 let partnerLedger: readonly MiniAppPartnerLedgerEntry[] = [];
 let cashOutQuote: MiniAppCashOutQuote | undefined;
 let cashOutQuoteStatus = "";
+let cashOutMethods: readonly MiniAppCashOutMethod[] = [];
+let cashOutRequestStatus = "";
 let screen: "dashboard" | "create" = "dashboard";
 let editingAlert: MiniAppAlert | undefined;
 let blockedBrokerIds: readonly string[] = [];
@@ -66,8 +69,8 @@ async function refresh(): Promise<void> {
   refreshing = true;
   render();
   try {
-    [alerts, dashboard, entitlement, referral, partnerEarnings, partnerLedger] = await Promise.all([
-      client.listAlerts(), client.getDashboard(), client.getEntitlement(), client.getReferralSummary(), client.getPartnerEarnings(), client.getPartnerLedger()
+    [alerts, dashboard, entitlement, referral, partnerEarnings, partnerLedger, cashOutMethods] = await Promise.all([
+      client.listAlerts(), client.getDashboard(), client.getEntitlement(), client.getReferralSummary(), client.getPartnerEarnings(), client.getPartnerLedger(), client.getCashOutMethods()
     ]);
     message = "";
   } catch (error: unknown) {
@@ -158,7 +161,7 @@ function partnerEarningsMarkup(): string {
   const pending = formatCents(partnerEarnings.pendingCents);
   const available = formatCents(partnerEarnings.availableCents);
   const availability = partnerEarnings.nextAvailableAt === null ? "No commissions are in a hold period." : `Next release: ${formatTime(partnerEarnings.nextAvailableAt)}.`;
-  return `<section class="partner-earnings"><div><p class="eyebrow">PARTNER EARNINGS</p><h2>${escapeHtml(partnerEarnings.status === "active" ? "Commission balance" : "Partner review")}</h2></div><p>${escapeHtml(partnerEarnings.status === "active" ? `${rate} · ${partnerEarnings.holdDays}-day hold before availability.` : "Your Partner account is not active, so commissions are not available for payout.")}</p><div class="partner-earnings-stats"><span><strong>${escapeHtml(pending)}</strong> pending</span><span><strong>${escapeHtml(available)}</strong> available</span><span><strong>${escapeHtml(formatCents(partnerEarnings.lifetimeEarnedCents))}</strong> lifetime</span></div><p class="cashout-readiness">${escapeHtml(cashOutReadiness(partnerEarnings))}</p>${cashOutQuoteMarkup(partnerEarnings)}${partnerLedgerMarkup()}<small>${escapeHtml(availability)} Cash-out requests will require a supported asset, network, and manual review before any payout is enabled.</small></section>`;
+  return `<section class="partner-earnings"><div><p class="eyebrow">PARTNER EARNINGS</p><h2>${escapeHtml(partnerEarnings.status === "active" ? "Commission balance" : "Partner review")}</h2></div><p>${escapeHtml(partnerEarnings.status === "active" ? `${rate} · ${partnerEarnings.holdDays}-day hold before availability.` : "Your Partner account is not active, so commissions are not available for payout.")}</p><div class="partner-earnings-stats"><span><strong>${escapeHtml(pending)}</strong> pending</span><span><strong>${escapeHtml(available)}</strong> available</span><span><strong>${escapeHtml(formatCents(partnerEarnings.lifetimeEarnedCents))}</strong> lifetime</span></div><p class="cashout-readiness">${escapeHtml(cashOutReadiness(partnerEarnings))}</p>${cashOutQuoteMarkup(partnerEarnings)}${cashOutRequestMarkup(partnerEarnings)}${partnerLedgerMarkup()}<small>${escapeHtml(availability)} Cash-out requests require a supported asset, network, and manual review; HaulAlert does not send a payout automatically.</small></section>`;
 }
 
 function cashOutQuoteMarkup(earnings: MiniAppPartnerEarnings): string {
@@ -166,6 +169,14 @@ function cashOutQuoteMarkup(earnings: MiniAppPartnerEarnings): string {
   const amount = cashOutQuote === undefined ? "" : (cashOutQuote.grossAmountCents / 100).toFixed(2);
   const quote = cashOutQuote === undefined ? "" : `<dl class="cashout-quote"><div><dt>Withdrawal amount</dt><dd>${escapeHtml(formatCents(cashOutQuote.grossAmountCents))}</dd></div><div><dt>Network &amp; Processing Fee</dt><dd>-${escapeHtml(formatCents(cashOutQuote.totalFeeCents))}</dd></div><div><dt>You receive</dt><dd>${escapeHtml(formatCents(cashOutQuote.netAmountCents))}</dd></div></dl>`;
   return `<form class="cashout-quote-form" data-cashout-quote><label>Preview cash-out amount (USD)<input name="amount" inputmode="decimal" pattern="[0-9]+(\\.[0-9]{1,2})?" placeholder="50.00" value="${escapeHtml(amount)}" required /></label><button class="secondary" type="submit">Calculate fee</button></form>${quote}${cashOutQuoteStatus ? `<p class="cashout-quote-status" role="status">${escapeHtml(cashOutQuoteStatus)}</p>` : ""}`;
+}
+
+function cashOutRequestMarkup(earnings: MiniAppPartnerEarnings): string {
+  if (!earnings.cashOutEligible) return "";
+  if (cashOutMethods.length === 0) return `<p class="cashout-quote-status">Cash-out requests are not enabled until HaulAlert selects supported payout networks.</p>`;
+  const amount = cashOutQuote === undefined ? "" : (cashOutQuote.grossAmountCents / 100).toFixed(2);
+  const options = cashOutMethods.map((method) => `<option value="${escapeHtml(`${method.asset}:${method.network}`)}">${escapeHtml(method.asset.toUpperCase())} · ${escapeHtml(method.network)}</option>`).join("");
+  return `<form class="cashout-request-form" data-cashout-request><label>Asset &amp; network<select name="method">${options}</select></label><label>Wallet address<input name="walletAddress" autocomplete="off" maxlength="160" required /></label><label>Cash-out amount (USD)<input name="amount" inputmode="decimal" pattern="[0-9]+(\\.[0-9]{1,2})?" placeholder="50.00" value="${escapeHtml(amount)}" required /></label><button class="primary" type="submit">Request manual review</button></form>${cashOutRequestStatus ? `<p class="cashout-quote-status" role="status">${escapeHtml(cashOutRequestStatus)}</p>` : ""}`;
 }
 
 function cashOutReadiness(earnings: MiniAppPartnerEarnings): string {
@@ -343,7 +354,34 @@ function bindInteractions(): void {
   app.querySelector<HTMLButtonElement>("[data-copy-referral]")?.addEventListener("click", () => { void copyReferralLink(); });
   app.querySelector<HTMLFormElement>("[data-feedback]")?.addEventListener("submit", (event) => { void submitFeedback(event); });
   app.querySelector<HTMLFormElement>("[data-cashout-quote]")?.addEventListener("submit", (event) => { void quoteCashOut(event); });
+  app.querySelector<HTMLFormElement>("[data-cashout-request]")?.addEventListener("submit", (event) => { void requestCashOut(event); });
   app.querySelector<HTMLButtonElement>("[data-refresh]")?.addEventListener("click", () => { void refresh(); });
+}
+
+async function requestCashOut(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (client === undefined || !(form instanceof HTMLFormElement)) return;
+  const data = new FormData(form);
+  const [asset, network, ...extra] = String(data.get("method") ?? "").split(":");
+  const grossAmountCents = parseDollarCents(String(data.get("amount") ?? ""));
+  const walletAddress = String(data.get("walletAddress") ?? "").trim();
+  if (asset === undefined || network === undefined || extra.length !== 0 || grossAmountCents === undefined || walletAddress.length === 0) {
+    cashOutRequestStatus = "Enter a supported method, wallet address, and amount.";
+    render();
+    return;
+  }
+  try {
+    await client.createPartnerCashOutRequest({ asset, network, walletAddress, grossAmountCents });
+    cashOutQuote = undefined;
+    cashOutRequestStatus = "Cash-out request received for manual review. No payout has been sent.";
+    await refresh();
+  } catch (error: unknown) {
+    cashOutRequestStatus = error instanceof MiniAppApiError && error.statusCode === 409
+      ? "Cash-out is no longer available for that amount. Refresh and try again."
+      : readableError(error);
+    render();
+  }
 }
 
 async function quoteCashOut(event: SubmitEvent): Promise<void> {

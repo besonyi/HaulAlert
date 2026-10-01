@@ -368,6 +368,13 @@ test("authenticated customers can read only their own partner earnings and quote
         received.push({ kind: `quote:${grossAmountCents}`, userId });
         return grossAmountCents === 5_000 ? { grossAmountCents: 5_000, totalFeeCents: 175, netAmountCents: 4_825 } : undefined;
       },
+      getCashOutMethods: () => [{ asset: "usdt", network: "tron" }],
+      createCashOutRequest: async (input) => {
+        received.push({ kind: `request:${input.grossAmountCents}`, userId: input.userId });
+        return input.asset === "usdt" && input.network === "tron"
+          ? { id: "request-1", asset: "usdt", network: "tron", walletDisplay: "TQ5TzY…9K8L", status: "requested" }
+          : undefined;
+      },
       getLedger: async (userId) => {
         received.push({ kind: "ledger", userId });
         return [{ id: "entry-1", entryType: "commission_available", amountCents: 750 }];
@@ -391,6 +398,14 @@ test("authenticated customers can read only their own partner earnings and quote
     assert.equal((await fetch(`http://127.0.0.1:${address.port}/v1/partner/cash-out/quote`, {
       method: "POST", headers: { authorization: "tma verified", "content-type": "application/json" }, body: JSON.stringify({ grossAmountCents: 7_500 })
     })).status, 409);
+    const methods = await fetch(`http://127.0.0.1:${address.port}/v1/partner/cash-out/methods`, { headers: { authorization: "tma verified" } });
+    assert.deepEqual(await methods.json(), { methods: [{ asset: "usdt", network: "tron" }] });
+    const cashOutRequest = await fetch(`http://127.0.0.1:${address.port}/v1/partner/cash-out/requests`, {
+      method: "POST", headers: { authorization: "tma verified", "content-type": "application/json" },
+      body: JSON.stringify({ asset: "usdt", network: "tron", walletAddress: "TQ5TzYjD4Qh9nk7qA4f8NBxYz3xF5W9K8L", grossAmountCents: 5000 })
+    });
+    assert.equal(cashOutRequest.status, 201);
+    assert.deepEqual(await cashOutRequest.json(), { request: { id: "request-1", asset: "usdt", network: "tron", walletDisplay: "TQ5TzY…9K8L", status: "requested" } });
     const ledger = await fetch(`http://127.0.0.1:${address.port}/v1/partner/ledger`, { headers: { authorization: "tma verified" } });
     assert.equal(ledger.status, 200);
     assert.deepEqual(await ledger.json(), { entries: [{ id: "entry-1", entryType: "commission_available", amountCents: 750 }] });
@@ -398,6 +413,7 @@ test("authenticated customers can read only their own partner earnings and quote
       { kind: "earnings", userId: "user-verified" },
       { kind: "quote:5000", userId: "user-verified" },
       { kind: "quote:7500", userId: "user-verified" },
+      { kind: "request:5000", userId: "user-verified" },
       { kind: "ledger", userId: "user-verified" }
     ]);
   } finally {
